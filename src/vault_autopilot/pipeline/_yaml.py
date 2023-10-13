@@ -1,9 +1,8 @@
 import asyncio
 import logging
 import reprlib
-import typing
 from dataclasses import dataclass
-from typing import IO, Any
+from typing import IO, Any, Iterator
 
 import pydantic
 import yaml
@@ -57,8 +56,8 @@ class YamlPipeline:
     DTOs, which it then places in the queue with the appropriate priority.
     """
 
-    # TODO: Create an intelligent composer for YAML files that prioritizes the
-    #  reading of critical elements first, allowing for simultaneous execution of the
+    # TODO: Create an intelligent loader for YAML files that prioritizes the
+    #  reading of critical documents first, allowing for simultaneous execution of the
     #  pipeline and dispatcher processes. This micro-optimization will decrease average
     #  memory consumption and speed up the application runtime.
 
@@ -67,7 +66,7 @@ class YamlPipeline:
     #  avoiding memory overflow.
 
     queue: QueueType
-    streamer: typing.Iterator[IO[bytes] | typing.BinaryIO]
+    streamer: Iterator[IO[bytes]]
 
     async def execute(self) -> QueueType:
         logger.debug("pipelining started")
@@ -90,7 +89,7 @@ class YamlPipeline:
             schema, priority = _SCHEMA_PRIORITY_MAP[kind]
         else:
             raise exc.ManifestKindMismatchError(
-                "Unsupported kind %r. Supported manifest kinds include: %s"
+                "Unsupported kind %r. Supported object kinds include: %s"
                 % (kind, str(_SCHEMA_PRIORITY_MAP.keys())),
                 filename=filename,
                 provided_kind=kind,

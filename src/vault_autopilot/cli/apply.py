@@ -1,5 +1,4 @@
 import asyncio
-import io
 import itertools
 import logging
 import pathlib
@@ -17,7 +16,7 @@ FilenamesOption = list[str]
 
 def read_files(
     filenames: Iterator[pathlib.Path], pass_stdin: bool = False
-) -> Iterator[io.BufferedReader | IO[bytes]]:
+) -> Iterator[IO[bytes]]:
     """
     If `pass_stdin` is True, ignores the provided file paths and reads the contents of
     STDIN instead. Otherwise, opens each file path in binary mode using `open()` and
@@ -28,7 +27,7 @@ def read_files(
         pass_stdin (bool): Whether to read from STDIN instead of the file paths.
 
     Returns:
-        An iterator of binary readers or binary I/O objects.
+        An iterator of I/O objects.
     """
     if pass_stdin:
         logger.debug("streaming manifests from stdin")
