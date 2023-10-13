@@ -1,2 +1,3 @@
 # vault-autopilot
-The ultimate tool for automating your HashiCorp Vault workflows.
+
+Effortlessly manage your secrets and other Vault resources with the power of automation.
