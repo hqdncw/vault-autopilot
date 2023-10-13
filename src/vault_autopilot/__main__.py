@@ -14,10 +14,11 @@ from vault_autopilot.helper.pydantic import convert_errors
 ConfigOption = Optional[pathlib.Path]
 
 
-def validate_config(fn: ConfigOption) -> conf.Settings:
+def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
     if fn is None:
-        # TODO: print usage examples
-        raise click.ClickException("Missing option '-c' / '--config'.")
+        raise click.MissingParameter(
+            param_type="option", param_hint="'-c' / '--config'", ctx=ctx
+        )
 
     try:
         payload = yaml.load(fn.read_bytes() if fn else bytes(), yaml.SafeLoader)
@@ -56,7 +57,7 @@ def cli(ctx: click.Context, debug: bool, config: ConfigOption = None) -> None:
     logging.basicConfig(
         level=logging.DEBUG if debug else logging.WARNING,
     )
-    ctx.obj = lazy_object_proxy.Proxy(lambda: validate_config(fn=config))
+    ctx.obj = lazy_object_proxy.Proxy(lambda: validate_config(ctx=ctx, fn=config))
 
 
 if __name__ == "__main__":
