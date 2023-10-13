@@ -8,8 +8,6 @@ import aiohttp
 
 from . import authenticator, composer, exc, manager
 
-HeadersContainer = dict[str, str]
-
 P = ParamSpec("P")
 T = TypeVar("T")
 
