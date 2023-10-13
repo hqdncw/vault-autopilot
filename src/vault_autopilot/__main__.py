@@ -49,7 +49,7 @@ def validate_config(fn: ConfigOption) -> conf.Settings:
         readable=True,
         path_type=pathlib.Path,  # pyright: ignore
     ),
-    help="Location of a client config file",
+    help="Path to a YAML configuration file",
 )
 @click.pass_context
 def cli(ctx: click.Context, debug: bool, config: ConfigOption = None) -> None:
