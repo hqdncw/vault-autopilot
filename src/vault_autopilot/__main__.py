@@ -1,6 +1,6 @@
 import logging
 import pathlib
-from typing import Any, Optional
+from typing import Optional
 
 import click
 import lazy_object_proxy
@@ -11,24 +11,30 @@ from vault_autopilot import conf, exc
 from vault_autopilot.cli.apply import apply
 from vault_autopilot.helper.pydantic import convert_errors
 
+ConfigOption = Optional[pathlib.Path]
 
-def validate_config(payload: dict[str, Any]) -> conf.Settings:
-    if not payload:
-        # TODO: print example usage
+
+def validate_config(fn: ConfigOption) -> conf.Settings:
+    if fn is None:
+        # TODO: print usage examples
         raise click.ClickException("Missing option '-c' / '--config'.")
 
     try:
-        res = conf.Settings(**payload)
-        assert isinstance(res, conf.Settings), "Expected %r, got %r" % (
-            conf.Settings.__name__,
-            res,
-        )
-        return res
+        payload = yaml.load(fn.read_bytes() if fn else bytes(), yaml.SafeLoader)
+    except yaml.error.MarkedYAMLError as ex:
+        raise exc.ManifestValidationError(str(ex), filename=str(fn)) from ex
+
+    try:
+        res = conf.Settings.model_validate(payload)
     except pydantic.ValidationError as ex:
-        # TODO: prevent token leaking in case of validation error
-        raise exc.ApplicationError(
-            "Improperly configured: %s" % convert_errors(ex)
-        ) from ex
+        # TODO: prevent token leakage in case of validation error
+        raise exc.ManifestValidationError(str(convert_errors(ex)), filename=str(fn))
+
+    assert isinstance(res, conf.Settings), "Expected %r, got %r" % (
+        conf.Settings.__name__,
+        res,
+    )
+    return res
 
 
 @click.group()
@@ -36,30 +42,21 @@ def validate_config(payload: dict[str, Any]) -> conf.Settings:
 @click.option(
     "-c",
     "--config",
-    type=click.Path(
+    type=click.Path(  # type: ignore
         dir_okay=False,
         exists=True,
         resolve_path=True,
         readable=True,
-        path_type=pathlib.Path,
-    ),  # type: ignore
+        path_type=pathlib.Path,  # pyright: ignore
+    ),
     help="Location of a client config file",
 )
 @click.pass_context
-def cli(ctx: click.Context, debug: bool, config: Optional[pathlib.Path] = None) -> None:
+def cli(ctx: click.Context, debug: bool, config: ConfigOption = None) -> None:
     logging.basicConfig(
         level=logging.DEBUG if debug else logging.WARNING,
     )
-
-    try:
-        data = yaml.load(config.read_bytes() if config else bytes(), yaml.SafeLoader)
-    except yaml.error.MarkedYAMLError as ex:
-        assert config is not None
-        raise exc.ApplicationError(
-            "Error parsing %r: %s" % (click.format_filename(str(config)), ex)
-        ) from ex
-
-    ctx.obj = lazy_object_proxy.Proxy(lambda: validate_config(payload=data))
+    ctx.obj = lazy_object_proxy.Proxy(lambda: validate_config(fn=config))
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ class ManifestValidationError(ApplicationError):
     linenumber: Optional[int] = None
 
     def format_message(self) -> str:
-        return f"Unable to decode {self.filename!r}: {self.message}"
+        return "Unable to decode %r: %s" % (self.filename, self.message)
 
 
 @dataclass(kw_only=True)
