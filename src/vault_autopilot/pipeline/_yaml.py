@@ -7,8 +7,7 @@ from typing import IO, Any, Iterator
 import pydantic
 import yaml
 
-from .. import dto, exc
-from ..helper.pydantic import convert_errors
+from .. import dto, exc, util
 
 logger = logging.getLogger(__name__)
 
@@ -16,17 +15,31 @@ logger = logging.getLogger(__name__)
 QueueType = asyncio.PriorityQueue[tuple[int, dto.BaseDTO]]
 
 _SCHEMA_PRIORITY_MAP = {
-    dto.PasswordDTO.__kind__: (
+    "PasswordPolicy": (dto.PasswordPolicyDTO, 0),
+    "Password": (
         dto.PasswordDTO,
-        0,
-    )
+        1,
+    ),
 }
 
 
 # class LineNumberLoader(yaml.SafeLoader):
-#     def __init__(self, stream):
+#     def __init__(self, stream) -> None:  # type: ignore
 #         super().__init__(stream)
-#         self.locations = {}
+
+#     def compose_document(self) -> Any:
+#         # Drop the DOCUMENT-START event.
+#         self.get_event()  # type: ignore
+
+#         # Compose the root node.
+#         node = self.compose_node(None, None)  # type: ignore
+
+#         # Drop the DOCUMENT-END event.
+#         self.get_event()  # type: ignore
+
+#         # this prevents cleaning of anchors between documents in **one stream**
+#         # self.anchors = {}
+#         return node
 
 #     def construct_object(self, node, deep=False):
 #         obj = super().construct_object(node, deep=deep)
@@ -72,8 +85,13 @@ class YamlPipeline:
         logger.debug("pipelining started")
 
         for reader in self.streamer:
-            for obj in yaml.load_all(reader, yaml.SafeLoader):
-                await self._consume(obj, filename=reader.name)
+            try:
+                for obj in yaml.load_all(reader, yaml.Loader):
+                    await self._consume(obj, filename=reader.name)
+            except yaml.error.MarkedYAMLError as ex:
+                raise exc.ManifestValidationError(
+                    str(ex), filename=str(reader.name)
+                ) from ex
 
         logger.debug("pipelining finished")
         return self.queue
@@ -101,7 +119,7 @@ class YamlPipeline:
             # TODO: print the contents of a YAML file, highlighting any invalid
             #  lines.
             raise exc.ManifestValidationError(
-                str(convert_errors(ex)), filename=filename
+                str(util.pydantic.convert_errors(ex)), filename=filename
             )
 
         await self._put(priority, data)

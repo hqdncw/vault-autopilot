@@ -35,6 +35,7 @@ class Dispatcher:
     """
 
     passwd_svc: "service.PasswordService"
+    passwd_policy_svc: "service.PasswordPolicyService"
     queue: asyncio.PriorityQueue[PrioritizedItem]
     max_dispatch: InitVar[int] = 64
 
@@ -72,10 +73,11 @@ class Dispatcher:
         logger.debug("dispatching finished")
 
     async def _queue_iter(self) -> AsyncIterator[PrioritizedItem]:
-        try:
-            yield await self.queue.get()
-        except asyncio.QueueEmpty:
-            return
+        while True:
+            try:
+                yield await self.queue.get()
+            except asyncio.QueueEmpty:
+                break
 
     async def _create_task(
         self,
@@ -96,6 +98,8 @@ class Dispatcher:
         match type(item):
             case dto.PasswordDTO:
                 await self.passwd_svc.push(payload=item)
+            case dto.PasswordPolicyDTO:
+                await self.passwd_policy_svc.push(payload=item)
             case _:
                 raise NotImplementedError("Unexpected object %r" % item)
         self.queue.task_done()

@@ -1,47 +1,19 @@
-import base64
-import secrets
-import string
 from dataclasses import dataclass
 
-from .. import dto
+from .. import dto, util
 from .._pkg import asyva
+from ..dto.password import StringEncoding
 from . import _abstract
-
-CHAR_SET = (
-    string.ascii_lowercase + string.ascii_uppercase + string.digits + string.punctuation
-)
-CHAR_SET_NO_SPECIALS = string.ascii_lowercase + string.ascii_uppercase + string.digits
-
-
-def rand(len_: int, use_specials: bool) -> str:
-    """
-    Generates a random password of given length.
-
-    Args:
-        use_specials (bool): Whether to include special characters in the password.
-
-    Returns:
-        str: A randomly generated password
-    """
-    return "".join(
-        secrets.choice(CHAR_SET if use_specials else CHAR_SET_NO_SPECIALS)
-        for _ in range(len_)
-    )
-
-
-def b64encode(input: str) -> str:
-    """Encodes given string to base64."""
-    return base64.b64encode(input.encode()).decode()
 
 
 def encode(value: str, encoding: str) -> str:
     match encoding:
-        case "base64":
-            return b64encode(value)
-        case "utf8":
+        case StringEncoding.BASE64:
+            return util.encoding.base64_encode(value)
+        case StringEncoding.UTF8:
             return value
         case _:
-            raise NotImplementedError()
+            raise NotImplementedError("Unknown string encoding present")
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,18 +21,26 @@ class PasswordService(_abstract.Service):
     client: asyva.Client
 
     async def push(self, payload: dto.BaseDTO) -> None:
-        assert isinstance(payload, dto.PasswordDTO), (
-            "Expected PasswordDTO, got %r" % payload
+        assert isinstance(payload, dto.PasswordDTO), "Expected %r, got %r" % (
+            dto.PasswordDTO,
+            payload,
         )
+
+        try:
+            value = await self.client.generate_password(
+                policy_path=payload.spec.policy_path
+            )
+        except asyva.exc.PolicyNotFoundError as ex:
+            # TODO: Instead of just saying "Policy not found", provide the user with a
+            #  more informative error message that includes the line number in the
+            #  manifest file where the policy path was defined.
+            raise ex
+
         await self.client.create_or_update_secret(
             path=payload.spec.path,
             data={
                 payload.spec.secret_keys.secret_key: encode(
-                    # TODO: generate value using Vault Password Policy API
-                    #  https://developer.hashicorp.com/vault/docs/concepts/password-policies
-                    value=rand(
-                        len_=payload.spec.length, use_specials=payload.spec.use_specials
-                    ),
+                    value=value,
                     encoding=payload.spec.encoding,
                 )
             },

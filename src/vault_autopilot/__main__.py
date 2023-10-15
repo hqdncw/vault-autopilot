@@ -7,9 +7,8 @@ import lazy_object_proxy
 import pydantic
 import yaml.error
 
-from vault_autopilot import conf, exc
+from vault_autopilot import conf, exc, util
 from vault_autopilot.cli.apply import apply
-from vault_autopilot.helper.pydantic import convert_errors
 
 ConfigOption = Optional[pathlib.Path]
 
@@ -29,7 +28,9 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
         res = conf.Settings.model_validate(payload)
     except pydantic.ValidationError as ex:
         # TODO: prevent token leakage in case of validation error
-        raise exc.ManifestValidationError(str(convert_errors(ex)), filename=str(fn))
+        raise exc.ManifestValidationError(
+            str(util.pydantic.convert_errors(ex)), filename=str(fn)
+        )
 
     assert isinstance(res, conf.Settings), "Expected %r, got %r" % (
         conf.Settings.__name__,

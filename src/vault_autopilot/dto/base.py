@@ -9,28 +9,25 @@ class BaseModel(pydantic.BaseModel):
     )
 
 
-class BaseSpec(BaseModel):
+class MountSpec(BaseModel):
     mount: str
 
 
-class SecretSpec(BaseSpec):
+class PathSpec(BaseModel):
     path: str
 
-    def get_full_path(self) -> str:
-        return "/".join((self.mount, self.path))
 
-
-class BaseMetadata(BaseModel):
-    name: str
+class SecretSpec(MountSpec, PathSpec):
+    """
+    Provides a convenient way to work with secrets that need to be accessed through
+    different secret engines and paths.
+    """
 
 
 class BaseDTO(BaseModel):
-    kind: str
-    metadata: BaseMetadata
-
     @property
-    def uid(self) -> str:
-        return ":".join((self.kind.lower(), self.metadata.name))
+    def uid(self) -> int:
+        return hash(self)
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, BaseDTO):
@@ -38,4 +35,10 @@ class BaseDTO(BaseModel):
         return self.uid == other.uid
 
 
-__all__ = ["BaseModel", "BaseSpec", "SecretSpec", "BaseMetadata", "BaseDTO"]
+__all__ = [
+    "BaseModel",
+    "MountSpec",
+    "PathSpec",
+    "SecretSpec",
+    "BaseDTO",
+]
