@@ -34,6 +34,7 @@ dependencies = [
   "aiohttp~=3.8.5",
   "asyncstdlib~=3.10.9",
   "lazy-object-proxy~=1.9.0",
+  "jinja~=3.1.2",
 ]
 version = "0.1.0"
 

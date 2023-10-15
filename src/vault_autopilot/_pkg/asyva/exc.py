@@ -131,6 +131,13 @@ class UnauthorizedError(VaultAPIError):
 
 
 @dataclass(slots=True, kw_only=True)
+class PolicyNotFoundError(VaultAPIError):
+    """
+    Raised when a policy is not found.
+    """
+
+
+@dataclass(slots=True, kw_only=True)
 class CASParameterMismatchError(VaultAPIError):
     """
     Raised when modifying a Vault secret fails due to a problem with the Check

@@ -64,5 +64,5 @@ class KvManager(base.BaseManager):
             return cast(int, (await resp.json())["data"]["current_version"])
 
         raise await exc.VaultAPIError.from_response(
-            "Failed to retrieve a secret current version", resp
+            "Failed to retrieve secret current version", resp
         )

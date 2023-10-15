@@ -11,7 +11,7 @@ from .._pkg import asyva
 
 logger = logging.getLogger(__name__)
 
-FilenamesOption = list[str]
+FilenamesOption = list[pathlib.Path]
 
 
 def read_files(
@@ -70,7 +70,7 @@ def resolve_file(
 
 def gather_files(filenames: FilenamesOption, recursive: bool) -> Iterator[pathlib.Path]:
     """Gathers all manifests found in the given file paths."""
-    for path in map(pathlib.Path, filenames):
+    for path in filenames:
         logger.debug("resolving %r" % path)
 
         if path.is_file():
@@ -89,7 +89,7 @@ def gather_files(filenames: FilenamesOption, recursive: bool) -> Iterator[pathli
 def stdin_has_data(filenames: FilenamesOption) -> bool:
     """Returns `True` if user requested the program to read from stdin, `False`
     otherwise."""
-    res = any(val == "-" for val in filenames) if filenames else False
+    res = any(val.name == "-" for val in filenames) if filenames else False
     return res
 
 
@@ -162,27 +162,30 @@ async def async_apply(
             raise_unexpected_err(ex)
     except Exception as e:
         raise_unexpected_err(e)
-    else:
-        # TODO: make the pipeline implementation coroutine-safe, so that we can run the
-        # dispatcher concurrently.
-        try:
-            await dispatcher.Dispatcher(
-                passwd_svc=service.PasswordService(client=client),
-                queue=queue,
-            ).dispatch()
-        except ExceptionGroup as eg:
-            ex = eg.exceptions[0]
 
-            if isinstance(ex, asyva.exc.CASParameterMismatchError):
-                # TODO: print the contents of a YAML file, highlighting any invalid
-                #  lines.
-                raise ex
-            else:
-                raise_unexpected_err(ex)
-        except Exception as ex:
+    # TODO: make the pipeline implementation coroutine-safe, so that we can run the
+    # dispatcher concurrently.
+    try:
+        await dispatcher.Dispatcher(
+            passwd_svc=service.PasswordService(client=client),
+            passwd_policy_svc=service.PasswordPolicyService(client=client),
+            queue=queue,
+        ).dispatch()
+    except ExceptionGroup as eg:
+        ex = eg.exceptions[0]
+
+        if isinstance(
+            ex, (asyva.exc.CASParameterMismatchError, asyva.exc.PolicyNotFoundError)
+        ):
+            # TODO: print the contents of a YAML file, highlighting any invalid
+            #  lines.
+            raise exc.ApplicationError(str(ex))
+        else:
             raise_unexpected_err(ex)
+    except Exception as ex:
+        raise_unexpected_err(ex)
 
-        click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
+    click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
 
 
 # TODO: epilog https://click.palletsprojects.com/en/8.1.x/documentation/#command-epilog-help
@@ -191,6 +194,12 @@ async def async_apply(
 @click.option(
     "-f",
     "--filename",
+    type=click.Path(  # type: ignore
+        # exists=True,
+        resolve_path=True,
+        readable=True,
+        path_type=pathlib.Path,  # pyright: ignore
+    ),
     multiple=True,
     required=True,
     help="The manifest to apply",
