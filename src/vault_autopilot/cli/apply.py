@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 FilenamesOption = list[pathlib.Path]
 
 
+MANIFEST_PATTERNS = (".yml", ".yaml")
+
+
 def read_files(
     filenames: Iterator[pathlib.Path], pass_stdin: bool = False
 ) -> Iterator[IO[bytes]]:
@@ -23,11 +26,11 @@ def read_files(
     yields its contents as an iterator.
 
     Args:
-        filenames (Iterator[pathlib.Path]): An iterator of file paths to read from.
-        pass_stdin (bool): Whether to read from STDIN instead of the file paths.
+        filenames: An iterator of regular files to read from.
+        pass_stdin: Whether to read from STDIN instead of the `filenames`
 
-    Returns:
-        An iterator of I/O objects.
+    Yields:
+        I/O objects representing the contents of the given files.
     """
     if pass_stdin:
         logger.debug("streaming manifests from stdin")
@@ -38,50 +41,83 @@ def read_files(
             yield open(fn, "rb")
 
 
-def resolve_file(
-    fn: pathlib.Path, suffix: str, recursive: bool = False
+def get_matching_files(
+    path: pathlib.Path, suffix: str, recursive: bool = False
 ) -> Iterator[pathlib.Path]:
     """
-    Yields absolute file paths matching the given suffix.
+    Searches for regular files with the specified suffix within the given directory,
+    optionally searching recursively through subdirectories.
 
     Args:
-        fn (pathlib.Path): The file path to resolve
-        suffix (str): The suffix to filter by
-        recursive (bool, optional): Recursively search directories, defaults to `False`
+        path:
+            The directory to search for regular files. If a regular
+            file is provided, it will be yielded if it matches the suffix.
+        suffix:
+            The suffix to search for. The suffix should include a dot (.)
+            followed by the desired extension. For example, ".txt" or ".pdf".
+        recursive:
+            Whether to search recursively through subdirectories.
 
-    Returns:
-        An iterator of absolute file paths that exist in the file system and have the
-        specified suffix.
+    Yields:
+        Each regular file that matches the specified suffix.
 
-    Details:
-        If a directory, recursively searches for files with the specified suffix if
-        `recursive` is `True`.
+    Examples:
+        >>> list(get_matching_files("example/a.txt", ".txt")) == ["example/a.txt"]
+        True
+        >>> list(get_matching_files("example", ".txt")) ==\\
+        ... ["example/a.txt", "example/b.txt"]
+        True
+        >>> list(get_matching_files("example", "doesnotexist")) == []
+        True
+        >>> list(get_matching_files("example", ".txt", recursive=True)) ==\\
+        ... ["example/a.txt", "example/b.txt", "example/subdirectory/c.txt"]
+        True
     """
-    fn.stat()
-    pattern = "*%s" % suffix
-    for fn in filter(
-        lambda fn: fn.is_file() and fn.stat(),
-        fn.rglob(pattern)
-        if recursive
-        else ((fn,) if fn.is_file() else fn.glob(pattern)),
+    assert suffix.startswith(
+        "."
+    ), "Suffix must start with a dot (.) followed by the desired extension"
+    for path in filter(
+        lambda path: path.is_file() and path.suffix == suffix and path.stat(),
+        (
+            (path,)
+            if path.is_file()
+            else path.rglob("*")
+            if recursive
+            else path.iterdir()
+        ),
     ):
-        yield fn.absolute()
+        yield path.absolute()
 
 
-def gather_files(filenames: FilenamesOption, recursive: bool) -> Iterator[pathlib.Path]:
-    """Gathers all manifests found in the given file paths."""
+def gather_manifests(
+    filenames: FilenamesOption,
+    recursive: bool,
+    patterns: tuple[str, ...] = MANIFEST_PATTERNS,
+) -> Iterator[pathlib.Path]:
+    """
+    Gathers all regular files found in the given file paths, recursively searching
+    through subdirectories if `recursive` is set to `True`. If a regular file is
+    provided instead of a directory, it will be yielded without validating its
+    extension. This allows for cases where a file with an unknown extension needs to
+    be processed as a manifest.
+
+    Args:
+        filenames: A list of file paths.
+        recursive: A boolean indicating whether to search through subdirectories.
+
+    Yields:
+        Manifest file path.
+    """
     for path in filenames:
         logger.debug("resolving %r" % path)
 
-        if path.is_file():
-            iter = resolve_file(path, suffix="", recursive=False)
-        else:
-            iter = itertools.chain(
-                resolve_file(path, suffix=".yaml", recursive=recursive),
-                resolve_file(path, suffix=".yml", recursive=recursive),
-            )
-
-        for fn in iter:
+        for fn in itertools.chain(
+            *(
+                get_matching_files(path, suffix=suffix, recursive=recursive)
+                for suffix in patterns
+            ),
+            ((path,) if path.is_file() and path.suffix not in patterns else ()),
+        ):
             logger.debug("discovered file %r" % fn)
             yield fn
 
@@ -91,21 +127,6 @@ def stdin_has_data(filenames: FilenamesOption) -> bool:
     otherwise."""
     res = any(val.name == "-" for val in filenames) if filenames else False
     return res
-
-
-async def parse_files(
-    filenames: FilenamesOption,
-    queue: asyncio.PriorityQueue[dispatcher.PrioritizedItem],
-    stdin_nonempty: bool,
-    recursive: bool,
-) -> None:
-    await pipeline.YamlPipeline(
-        queue=queue,
-        streamer=read_files(
-            filenames=gather_files(filenames, recursive),
-            pass_stdin=stdin_nonempty,
-        ),
-    ).execute()
 
 
 def raise_unexpected_err(ex: Exception) -> NoReturn:
@@ -119,13 +140,8 @@ async def async_apply(
     filenames: FilenamesOption,
     recursive: bool,
 ) -> None:
-    authn = settings.auth.get_authenticator()
-
-    if stdin_nonempty := stdin_has_data(filenames=filenames):
-        if filenames and len(filenames) > 1:
-            raise exc.StdinInputCombinationError(
-                "Cannot combine stdin with filenames (-f)"
-            )
+    if (stdin_nonempty := stdin_has_data(filenames=filenames)) and len(filenames) > 1:
+        raise exc.StdinInputCombinationError("Cannot combine stdin with filenames (-f)")
 
     queue: pipeline.QueueType = asyncio.PriorityQueue()
 
@@ -134,17 +150,20 @@ async def async_apply(
             tg.create_task(
                 client.authenticate(
                     base_url=settings.base_url,
-                    authn=authn,
+                    authn=settings.auth.get_authenticator(),
                     namespace=settings.namespace,
                 )
             )
             tg.create_task(
-                parse_files(
-                    filenames=filenames,
+                pipeline.YamlPipeline(
                     queue=queue,
-                    stdin_nonempty=bool(stdin_nonempty),
-                    recursive=recursive,
-                )
+                    streamer=read_files(
+                        filenames=gather_manifests(
+                            filenames, recursive, MANIFEST_PATTERNS
+                        ),
+                        pass_stdin=stdin_nonempty,
+                    ),
+                ).execute()
             )
     except ExceptionGroup as eg:
         ex = eg.exceptions[0]
@@ -195,14 +214,12 @@ async def async_apply(
     "-f",
     "--filename",
     type=click.Path(  # type: ignore
-        # exists=True,
-        resolve_path=True,
         readable=True,
         path_type=pathlib.Path,  # pyright: ignore
     ),
     multiple=True,
     required=True,
-    help="The manifest to apply",
+    help="The manifest to apply (can be repeated)",
 )
 @click.option(
     "-R",
@@ -247,9 +264,7 @@ def apply(ctx: click.Context, filename: FilenamesOption, recursive: bool) -> Non
 
     try:
         event_loop.run_until_complete(
-            asyncio.gather(
-                client.__aenter__(), async_apply(settings, client, filename, recursive)
-            )
+            async_apply(settings, client, filename, recursive)
         )
     finally:
         event_loop.run_until_complete(client.__aexit__())
