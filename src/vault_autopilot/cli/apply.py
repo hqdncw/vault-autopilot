@@ -86,7 +86,7 @@ def get_matching_files(
             else path.iterdir()
         ),
     ):
-        yield path.absolute()
+        yield path
 
 
 def gather_manifests(
