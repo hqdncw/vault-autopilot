@@ -125,8 +125,7 @@ def gather_manifests(
 def stdin_has_data(filenames: FilenamesOption) -> bool:
     """Returns `True` if user requested the program to read from stdin, `False`
     otherwise."""
-    res = any(val.name == "-" for val in filenames) if filenames else False
-    return res
+    return any(val.name == "-" for val in filenames) if filenames else False
 
 
 def raise_unexpected_err(ex: Exception) -> NoReturn:
