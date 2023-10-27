@@ -21,5 +21,8 @@ class PasswordSpec(base.SecretEngineMixin, base.PathMixin):
 
 
 @dataclass(slots=True)
-class PasswordDTO(base.BaseDTO):
+class PasswordCreateDTO(base.BaseDTO):
     spec: PasswordSpec
+
+    def full_path(self) -> str:
+        return "{0[secret_engine]}/{0[secret_keys][secret_key]}".format(self.spec)

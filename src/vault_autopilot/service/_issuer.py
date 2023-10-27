@@ -1,15 +1,17 @@
+import logging
 from dataclasses import dataclass
 
 from .. import dto, util
 from .._pkg import asyva
-from . import _abstract
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class IssuerService(_abstract.Service):
+class IssuerService:
     client: asyva.Client
 
-    async def _push_intmd_issuer(self, payload: dto.IssuerDTO) -> None:
+    async def _create_intmd_issuer(self, payload: dto.IssuerCreateDTO) -> None:
         mount_path, csr_params, iss_params = (
             payload.spec.get("secret_engine"),
             payload.spec.get("csr_params"),
@@ -43,10 +45,12 @@ class IssuerService(_abstract.Service):
         )
 
         if not (
-            (imported_issuers := res.data.get("imported_keys"))
+            (imported_issuers := res.data.get("imported_issuers"))
             and len(imported_issuers) == 1
         ):
-            raise RuntimeError("Expected one issuer only, got %r" % imported_issuers)
+            raise RuntimeError(
+                "Expected one issuer only to be imported, got %r" % imported_issuers
+            )
 
         await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
@@ -54,19 +58,16 @@ class IssuerService(_abstract.Service):
             mount_path=payload.spec["secret_engine"],
         )
 
-    async def _push_root_issuer(self, payload: dto.IssuerDTO) -> None:
+    async def _create_root_issuer(self, payload: dto.IssuerCreateDTO) -> None:
         spec, csr_params = payload.spec, payload.spec["csr_params"]
         await self.client.generate_root(
             mount_path=spec["secret_engine"],
             **util.pydantic.model_dump(csr_params, exclude_unset=True),
         )
 
-    async def push(self, payload: dto.BaseDTO) -> None:
-        assert isinstance(payload, dto.IssuerDTO), "Expected %r, got %r" % (
-            dto.IssuerDTO,
-            payload,
-        )
+    async def create(self, payload: dto.IssuerCreateDTO) -> None:
         if payload.spec.get("issuance_params"):
-            await self._push_intmd_issuer(payload)
+            await self._create_intmd_issuer(payload)
         else:
-            await self._push_root_issuer(payload)
+            await self._create_root_issuer(payload)
+        logger.debug("issuer %r created" % payload.get_full_path())

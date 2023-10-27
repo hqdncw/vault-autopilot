@@ -11,5 +11,5 @@ class PasswordPolicySpec(TypedDict):
 
 
 @dataclass(slots=True)
-class PasswordPolicyDTO(base.BaseDTO):
+class PasswordPolicyCreateDTO(base.BaseDTO):
     spec: PasswordPolicySpec

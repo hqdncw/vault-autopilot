@@ -6,7 +6,7 @@ from typing import IO, Iterator, NoReturn
 
 import click
 
-from .. import conf, dispatcher, exc, pipeline, service
+from .. import conf, dispatcher, exc, parser
 from .._pkg import asyva
 
 logger = logging.getLogger(__name__)
@@ -138,23 +138,29 @@ async def async_apply(
     client: asyva.Client,
     filenames: FilenamesOption,
     recursive: bool,
+    disable_yaml_anchor_sharing: bool,
 ) -> None:
     if (stdin_nonempty := stdin_has_data(filenames=filenames)) and len(filenames) > 1:
         raise exc.StdinInputCombinationError("Cannot combine stdin with filenames (-f)")
 
-    queue: pipeline.QueueType = asyncio.PriorityQueue()
+    queue: parser.QueueType = asyncio.Queue()
+
+    async def start_dispatcher() -> None:
+        await client.authenticate(
+            base_url=settings.base_url,
+            authn=settings.auth.get_authenticator(),
+            namespace=settings.default_namespace,
+        )
+        await dispatcher.Dispatcher(
+            client=client,
+            queue=queue,
+        ).dispatch()
 
     try:
         async with asyncio.TaskGroup() as tg:
+            tg.create_task(start_dispatcher())
             tg.create_task(
-                client.authenticate(
-                    base_url=settings.base_url,
-                    authn=settings.auth.get_authenticator(),
-                    namespace=settings.default_namespace,
-                )
-            )
-            tg.create_task(
-                pipeline.YamlPipeline(
+                parser.YamlParser(
                     queue=queue,
                     streamer=read_files(
                         filenames=gather_manifests(
@@ -162,10 +168,17 @@ async def async_apply(
                         ),
                         pass_stdin=stdin_nonempty,
                     ),
+                    file_scoped_anchors=not disable_yaml_anchor_sharing,
                 ).execute()
             )
     except ExceptionGroup as eg:
         ex = eg.exceptions[0]
+
+        while True:
+            if isinstance(ex, ExceptionGroup):
+                ex = ex.exceptions[0]
+                continue
+            break
 
         if isinstance(
             ex, (asyva.exc.ConnectionRefusedError, asyva.exc.UnauthorizedError)
@@ -176,24 +189,7 @@ async def async_apply(
             raise ex
         elif isinstance(ex, FileNotFoundError):
             raise exc.ApplicationError(str(ex))
-        else:
-            raise_unexpected_err(ex)
-    except Exception as e:
-        raise_unexpected_err(e)
-
-    # TODO: make the pipeline implementation coroutine-safe, so that we can run the
-    # dispatcher concurrently.
-    try:
-        await dispatcher.Dispatcher(
-            passwd_svc=service.PasswordService(client=client),
-            passwd_policy_svc=service.PasswordPolicyService(client=client),
-            issuer_svc=service.IssuerService(client=client),
-            queue=queue,
-        ).dispatch()
-    except ExceptionGroup as eg:
-        ex = eg.exceptions[0]
-
-        if isinstance(
+        elif isinstance(
             ex,
             (
                 asyva.exc.CASParameterMismatchError,
@@ -206,8 +202,8 @@ async def async_apply(
             raise exc.ApplicationError(str(ex))
         else:
             raise_unexpected_err(ex)
-    except Exception as ex:
-        raise_unexpected_err(ex)
+    except Exception as e:
+        raise_unexpected_err(e)
 
     click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
 
@@ -224,7 +220,7 @@ async def async_apply(
     ),
     multiple=True,
     required=True,
-    help="The manifest to apply (can be repeated)",
+    help="The manifest to apply (can be repeated).",
 )
 @click.option(
     "-R",
@@ -233,11 +229,25 @@ async def async_apply(
     default=False,
     help=(
         "Process the directory used in `-f`, `--filename` recursively. Useful when you "
-        "want to manage related manifests organized within the same directory"
+        "want to manage related manifests organized within the same directory."
+    ),
+)
+@click.option(
+    "--disable-yaml-anchor-sharing",
+    is_flag=True,
+    default=False,
+    help=(
+        "Prevent YAML anchors from being shared across multiple YAML documents within "
+        "the same manifest file."
     ),
 )
 @click.pass_context
-def apply(ctx: click.Context, filename: FilenamesOption, recursive: bool) -> None:
+def apply(
+    ctx: click.Context,
+    filename: FilenamesOption,
+    recursive: bool,
+    disable_yaml_anchor_sharing: bool,
+) -> None:
     """
     Apply a manifest to a Vault server by file name or stdin.
 
@@ -269,10 +279,15 @@ def apply(ctx: click.Context, filename: FilenamesOption, recursive: bool) -> Non
 
     try:
         event_loop.run_until_complete(
-            async_apply(settings, client, filename, recursive)
+            async_apply(
+                settings, client, filename, recursive, disable_yaml_anchor_sharing
+            )
         )
     finally:
         event_loop.run_until_complete(client.__aexit__())
+        # Zero-sleep to allow underlying connections to close
+        # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
+        event_loop.run_until_complete(asyncio.sleep(0))
 
 
 __all__ = ["apply"]

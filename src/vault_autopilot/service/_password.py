@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from .. import dto, util
 from .._pkg import asyva
 from ..dto.password import StringEncodingType
-from . import _abstract
 
 
 def encode(value: str, encoding: StringEncodingType) -> str:
@@ -17,15 +16,10 @@ def encode(value: str, encoding: StringEncodingType) -> str:
 
 
 @dataclass(slots=True)
-class PasswordService(_abstract.Service):
+class PasswordService:
     client: asyva.Client
 
-    async def push(self, payload: dto.BaseDTO) -> None:
-        assert isinstance(payload, dto.PasswordDTO), "Expected %r, got %r" % (
-            dto.PasswordDTO,
-            payload,
-        )
-
+    async def create(self, payload: dto.PasswordCreateDTO) -> None:
         try:
             value = await self.client.generate_password(
                 policy_path=payload.spec["policy_path"]

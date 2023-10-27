@@ -1,4 +1,3 @@
-import asyncio
 import functools
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
@@ -37,8 +36,6 @@ def exception_handler(
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         try:
             return await func(*args, **kwargs)
-        except exc.VaultAPIError as ex:
-            raise ex
         except aiohttp.ClientConnectorError as ex:
             raise exc.ConnectionRefusedError(
                 "The connection to the server {host}:{port} was refused - did you "
@@ -46,6 +43,8 @@ def exception_handler(
                 host=ex.host,
                 port=ex.port,
             ) from ex
+        except exc.VaultAPIError as ex:
+            raise ex
         except Exception as ex:
             raise ex from ex
 
@@ -99,7 +98,7 @@ class Client:
             token = await authn.authenticate(sess=sess)
 
         # Provide the managers with an authenticated session, allowing them to access
-        # the Vault HTTP API
+        # the secured endpoints
         self._authn_sess = composer.StandardComposer(
             base_url=base_url, token=token, namespace=namespace
         ).create()
@@ -114,10 +113,6 @@ class Client:
     async def __aexit__(self) -> None:
         if self._authn_sess:
             await self._authn_sess.__aexit__(None, None, None)
-
-        # Zero-sleep to allow underlying connections to close
-        # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
-        await asyncio.sleep(0)
 
     @exception_handler
     @login_required
@@ -156,7 +151,7 @@ class Client:
     ) -> None:
         ...
 
-    @exception_handler  # type: ignore
+    @exception_handler  # type: ignore[misc]
     @login_required
     async def create_or_update_password_policy(
         self,

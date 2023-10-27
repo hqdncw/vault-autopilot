@@ -40,7 +40,7 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
 
 
 @click.group()
-@click.option("-D", "--debug/--no-debug", default=False, help="Enable debug mode")
+@click.option("-D", "--debug/--no-debug", default=False, help="Enable debug mode.")
 @click.option(
     "-c",
     "--config",
@@ -51,7 +51,7 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
         readable=True,
         path_type=pathlib.Path,  # pyright: ignore[reportGeneralTypeIssues]
     ),
-    help="Path to a YAML configuration file",
+    help="Path to a YAML configuration file.",
 )
 @click.pass_context
 def cli(ctx: click.Context, debug: bool, config: ConfigOption = None) -> None:

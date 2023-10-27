@@ -1,6 +1,6 @@
 from .base import BaseDTO
-from .issuer import IssuerDTO
-from .password import PasswordDTO
-from .password_policy import PasswordPolicyDTO
+from .issuer import IssuerCreateDTO
+from .password import PasswordCreateDTO
+from .password_policy import PasswordPolicyCreateDTO
 
-__all__ = "BaseDTO", "PasswordDTO", "PasswordPolicyDTO", "IssuerDTO"
+__all__ = "BaseDTO", "IssuerCreateDTO", "PasswordCreateDTO", "PasswordPolicyCreateDTO"

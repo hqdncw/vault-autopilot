@@ -18,7 +18,7 @@ SECRET_EXCL = {"mount_path", "path"}
 class KVV2Manager(base.BaseManager):
     async def create_or_update(self, **payload: Unpack[dto.SecretCreateDTO]) -> None:
         data: dict[str, Any] = dict(
-            data=util.pydantic.model_dump(
+            data=util.pydantic.model_dump_json(
                 payload, exclude=SECRET_EXCL, exclude_unset=True
             )
         )
@@ -28,7 +28,7 @@ class KVV2Manager(base.BaseManager):
         async with self.new_session() as sess:
             resp = await sess.post(
                 "/v1/{0[mount_path]}/data/{0[path]}".format(payload),
-                json=data,
+                data=data,
             )
 
         if resp.status == http.HTTPStatus.OK:
@@ -59,7 +59,7 @@ class KVV2Manager(base.BaseManager):
 
         logger.debug(resp_body)
         raise await exc.VaultAPIError.from_response(
-            "failed to create/update secret", resp
+            "Failed to create/update secret", resp
         )
 
     async def get_version(self, **payload: Unpack[dto.SecretGetVersionDTO]) -> int:

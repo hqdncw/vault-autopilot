@@ -32,9 +32,10 @@ dependencies = [
   "pydantic~=2.4.2",
   "pyyaml~=6.0.1",
   "aiohttp~=3.8.5",
-  "asyncstdlib~=3.10.9",
   "lazy-object-proxy~=1.9.0",
   "jinja~=3.1.2",
+  "networkx~=3.2.1",
+  "more-itertools~=10.1.0"
 ]
 version = "0.1.0"
 
@@ -103,7 +104,8 @@ plugins = [
 
 [[tool.mypy.overrides]]
 module = [
-    "lazy_object_proxy.*",
+  "lazy_object_proxy.*",
+  "networkx.*"
 ]
 ignore_missing_imports = true
 
