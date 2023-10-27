@@ -25,7 +25,7 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
         raise exc.ManifestValidationError(str(ex), filename=str(fn)) from ex
 
     try:
-        res = conf.Settings.model_validate(payload)
+        res = conf.Settings(**payload)
     except pydantic.ValidationError as ex:
         # TODO: prevent token leakage in case of validation error
         raise exc.ManifestValidationError(
@@ -44,12 +44,12 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
 @click.option(
     "-c",
     "--config",
-    type=click.Path(  # type: ignore
+    type=click.Path(  # type: ignore[type-var]
         dir_okay=False,
         exists=True,
         resolve_path=True,
         readable=True,
-        path_type=pathlib.Path,  # pyright: ignore
+        path_type=pathlib.Path,  # pyright: ignore[reportGeneralTypeIssues]
     ),
     help="Path to a YAML configuration file",
 )

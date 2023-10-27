@@ -1,18 +1,15 @@
-from typing import Any
+from pydantic.dataclasses import dataclass
+from typing_extensions import TypedDict
 
-from vault_autopilot._pkg import asyva
-
+from .._pkg.asyva.dto import password_policy
 from . import base
 
 
-class PasswordPolicySpec(base.PathSpec, asyva.PasswordPolicy):
-    pass
+class PasswordPolicySpec(TypedDict):
+    path: str
+    policy_params: password_policy.PasswordPolicy
 
 
+@dataclass(slots=True)
 class PasswordPolicyDTO(base.BaseDTO):
     spec: PasswordPolicySpec
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, PasswordPolicyDTO):
-            raise TypeError()
-        return self.spec.path == other.spec.path

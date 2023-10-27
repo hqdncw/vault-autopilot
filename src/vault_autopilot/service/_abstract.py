@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from .. import dto
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass
 class Service(abc.ABC):
     @abc.abstractmethod
     async def push(self, payload: dto.BaseDTO) -> None:

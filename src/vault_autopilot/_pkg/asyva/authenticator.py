@@ -16,10 +16,11 @@ def read_jwt(fn: str) -> str:
     return pathlib.Path(fn).read_text()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class AbstractAuthenticator(abc.ABC):
     """
-    An abstract class that defines the interface for authenticating with HashiCorp.
+    An abstract class that defines the interface for authenticating with the Auth
+    Method.
     """
 
     @abc.abstractmethod
@@ -28,7 +29,7 @@ class AbstractAuthenticator(abc.ABC):
         successful authentication."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class KubernetesAuthenticator(AbstractAuthenticator):
     mount_path: str
     role: str
@@ -36,8 +37,8 @@ class KubernetesAuthenticator(AbstractAuthenticator):
 
     async def authenticate(self, sess: aiohttp.ClientSession) -> pydantic.SecretStr:
         """
-        .. reference::
-            <https://developer.hashicorp.com/vault/docs/auth/kubernetes#via-the-api>
+        References:
+            https://developer.hashicorp.com/vault/docs/auth/kubernetes#via-the-api
         """
         resp = await sess.post(
             f"/v1/auth/{self.mount_path}/login",
@@ -53,14 +54,14 @@ class KubernetesAuthenticator(AbstractAuthenticator):
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class TokenAuthenticator(AbstractAuthenticator):
     token: pydantic.SecretStr
 
     async def authenticate(self, sess: aiohttp.ClientSession) -> pydantic.SecretStr:
         """
-        .. reference::
-            <https://developer.hashicorp.com/vault/api-docs/auth/token#lookup-a-token-self>
+        References:
+            https://developer.hashicorp.com/vault/api-docs/auth/token#lookup-a-token-self
         """
         resp = await sess.get(
             "/v1/auth/token/lookup-self",
@@ -71,7 +72,7 @@ class TokenAuthenticator(AbstractAuthenticator):
             case http.HTTPStatus.OK:
                 return self.token
             case http.HTTPStatus.FORBIDDEN:
-                raise exc.AuthenticationError(
+                raise exc.UnauthorizedError(
                     "The token you provided is invalid or has expired. Please ensure "
                     "that your Vault credentials are correct and try again."
                 )

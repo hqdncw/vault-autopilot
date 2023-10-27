@@ -96,6 +96,7 @@ warn_return_any = true
 follow_imports_for_stubs = true
 namespace_packages = true
 show_absolute_path = true
+enable_incomplete_feature = ["Unpack"]
 plugins = [
   "pydantic.mypy"
 ]

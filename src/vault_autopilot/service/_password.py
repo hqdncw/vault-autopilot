@@ -2,21 +2,21 @@ from dataclasses import dataclass
 
 from .. import dto, util
 from .._pkg import asyva
-from ..dto.password import StringEncoding
+from ..dto.password import StringEncodingType
 from . import _abstract
 
 
-def encode(value: str, encoding: str) -> str:
+def encode(value: str, encoding: StringEncodingType) -> str:
     match encoding:
-        case StringEncoding.BASE64:
+        case "base64":
             return util.encoding.base64_encode(value)
-        case StringEncoding.UTF8:
+        case "utf8":
             return value
         case _:
             raise NotImplementedError("Unknown string encoding present")
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class PasswordService(_abstract.Service):
     client: asyva.Client
 
@@ -28,22 +28,21 @@ class PasswordService(_abstract.Service):
 
         try:
             value = await self.client.generate_password(
-                policy_path=payload.spec.policy_path
+                policy_path=payload.spec["policy_path"]
             )
-        except asyva.exc.PolicyNotFoundError as ex:
+        except asyva.exc.PasswordPolicyNotFoundError as ex:
             # TODO: Instead of just saying "Policy not found", provide the user with a
             #  more informative error message that includes the line number in the
             #  manifest file where the policy path was defined.
             raise ex
 
         await self.client.create_or_update_secret(
-            path=payload.spec.path,
+            path=payload.spec["path"],
             data={
-                payload.spec.secret_keys.secret_key: encode(
-                    value=value,
-                    encoding=payload.spec.encoding,
+                payload.spec["secret_keys"]["secret_key"]: encode(
+                    value=value, encoding=payload.spec["encoding"]
                 )
             },
-            cas=payload.spec.cas,
-            mount_path=payload.spec.mount,
+            cas=payload.spec["cas"],
+            mount_path=payload.spec["secret_engine"],
         )

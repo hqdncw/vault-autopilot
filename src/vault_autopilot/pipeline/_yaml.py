@@ -14,12 +14,14 @@ logger = logging.getLogger(__name__)
 
 QueueType = asyncio.PriorityQueue[tuple[int, dto.BaseDTO]]
 
+
 _SCHEMA_PRIORITY_MAP = {
     "PasswordPolicy": (dto.PasswordPolicyDTO, 0),
     "Password": (
         dto.PasswordDTO,
         1,
     ),
+    "Issuer": (dto.IssuerDTO, 1),
 }
 
 
@@ -61,7 +63,7 @@ _SCHEMA_PRIORITY_MAP = {
 #         loader.dispose()
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class YamlPipeline:
     """
     This pipeline is responsible for processing YAML manifests received from the

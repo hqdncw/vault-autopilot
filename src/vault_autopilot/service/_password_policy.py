@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 
-from .. import dto
+from .. import dto, util
 from .._pkg import asyva
 from . import _abstract
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class PasswordPolicyService(_abstract.Service):
     client: asyva.Client
 
@@ -15,5 +15,8 @@ class PasswordPolicyService(_abstract.Service):
             payload,
         )
         await self.client.create_or_update_password_policy(
-            path=payload.spec.path, policy=payload.spec
+            path=payload.spec["path"],
+            **util.pydantic.model_dump(
+                payload.spec["policy_params"], exclude_unset=True
+            ),
         )

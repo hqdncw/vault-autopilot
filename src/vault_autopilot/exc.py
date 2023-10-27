@@ -12,13 +12,10 @@ class ApplicationError(click.ClickException):
     Provides an `exit_code` attribute for specifying a specific exit code, and a
     `message` attribute containing a human-readable description of the error.
 
-    Allowed exit codes are defined in the Advanced Bash-Scripting Guide at
-    <https://tldp.org/LDP/abs/html/exitcodes.html>. Note that user-defined exit codes
-    are restricted to the range 64 - 113.
-
-    Attributes:
-        exit_code (int): The exit code to use when raising the exception.
-        message (str): A brief description of the error.
+    See Also:
+        Allowed exit codes are defined in the Advanced Bash-Scripting Guide at
+        https://tldp.org/LDP/abs/html/exitcodes.html. Note that user-defined exit
+        codes are restricted to the range 64 - 113.
     """
 
     exit_code = 1

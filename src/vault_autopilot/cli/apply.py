@@ -150,7 +150,7 @@ async def async_apply(
                 client.authenticate(
                     base_url=settings.base_url,
                     authn=settings.auth.get_authenticator(),
-                    namespace=settings.namespace,
+                    namespace=settings.default_namespace,
                 )
             )
             tg.create_task(
@@ -168,7 +168,7 @@ async def async_apply(
         ex = eg.exceptions[0]
 
         if isinstance(
-            ex, (asyva.exc.ConnectionRefusedError, asyva.exc.AuthenticationError)
+            ex, (asyva.exc.ConnectionRefusedError, asyva.exc.UnauthorizedError)
         ):
             logger.debug(ex, exc_info=ex)
             raise exc.ApplicationError("Authentication error: %s" % ex) from ex
@@ -187,13 +187,19 @@ async def async_apply(
         await dispatcher.Dispatcher(
             passwd_svc=service.PasswordService(client=client),
             passwd_policy_svc=service.PasswordPolicyService(client=client),
+            issuer_svc=service.IssuerService(client=client),
             queue=queue,
         ).dispatch()
     except ExceptionGroup as eg:
         ex = eg.exceptions[0]
 
         if isinstance(
-            ex, (asyva.exc.CASParameterMismatchError, asyva.exc.PolicyNotFoundError)
+            ex,
+            (
+                asyva.exc.CASParameterMismatchError,
+                asyva.exc.PasswordPolicyNotFoundError,
+                asyva.exc.IssuerNameTakenError,
+            ),
         ):
             # TODO: print the contents of a YAML file, highlighting any invalid
             #  lines.
@@ -212,9 +218,9 @@ async def async_apply(
 @click.option(
     "-f",
     "--filename",
-    type=click.Path(  # type: ignore
+    type=click.Path(  # type: ignore[type-var]
         readable=True,
-        path_type=pathlib.Path,  # pyright: ignore
+        path_type=pathlib.Path,  # pyright: ignore[reportGeneralTypeIssues]
     ),
     multiple=True,
     required=True,

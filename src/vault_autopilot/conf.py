@@ -1,29 +1,30 @@
 from typing import Any, Optional
 
+import pydantic
 import pydantic.alias_generators
+from pydantic.dataclasses import dataclass
 
-from vault_autopilot._pkg import asyva
-
-
-class BaseModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        alias_generator=pydantic.alias_generators.to_snake
-    )
+from ._pkg import asyva
 
 
-class AuthMethodSelector(BaseModel):
+@dataclass(slots=True)
+class AuthMethodSelector:
     kubernetes: Optional[asyva.KubernetesAuthenticator] = None
     token: Optional[asyva.TokenAuthenticator] = None
 
     @pydantic.model_validator(mode="before")
     @classmethod
-    def mutually_exclusive(cls, data: Any) -> Any:
+    def mutually_exclusive(cls, data: dict[str, Any]) -> dict[str, Any]:
         if isinstance(data, dict):
-            options = data.get("kubernetes"), data.get("token")
-            if not any(options):
-                raise ValueError("either 'kubernetes' or 'token' must be provided")
-            if all(options):
-                raise ValueError("only one of 'kubernetes' and 'token' can be provided")
+            params = (
+                isinstance(data.get("kubernetes"), dict),
+                isinstance(data.get("token"), dict),
+            )
+            if not any(params) or all(params):
+                raise ValueError(
+                    "input must include a mapping key that is either 'kubernetes' "
+                    " or 'token'"
+                )
         return data
 
     def get_authenticator(
@@ -36,11 +37,10 @@ class AuthMethodSelector(BaseModel):
         raise RuntimeError("Authentication method not selected")
 
 
-class Settings(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        alias_generator=pydantic.alias_generators.to_snake
-    )
-
+@dataclass(
+    config=pydantic.ConfigDict(alias_generator=pydantic.alias_generators.to_camel)
+)
+class Settings:
     auth: AuthMethodSelector
-    base_url: str = "http://localhost:8200"
-    namespace: Optional[str] = None
+    base_url: str
+    default_namespace: str = ""

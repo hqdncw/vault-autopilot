@@ -1,44 +1,35 @@
 from typing import Any
 
+import pydantic
 import pydantic.alias_generators
+from pydantic.dataclasses import dataclass
+from typing_extensions import TypedDict
+
+base_model_config = pydantic.ConfigDict(
+    alias_generator=pydantic.alias_generators.to_camel
+)
 
 
-class BaseModel(pydantic.BaseModel):
-    model_config = pydantic.ConfigDict(
-        alias_generator=pydantic.alias_generators.to_camel
-    )
+class SecretEngineMixin(TypedDict):
+    secret_engine: str
 
 
-class MountSpec(BaseModel):
-    mount: str
-
-
-class PathSpec(BaseModel):
+class PathMixin(TypedDict):
     path: str
 
 
-class SecretSpec(MountSpec, PathSpec):
-    """
-    Provides a convenient way to work with secrets that need to be accessed through
-    different secret engines and paths.
-    """
-
-
-class BaseDTO(BaseModel):
-    @property
-    def uid(self) -> int:
-        return hash(self)
-
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, BaseDTO):
-            raise TypeError()
-        return self.uid == other.uid
+@dataclass(config=base_model_config)
+class BaseDTO:
+    def __lt__(self, other: Any) -> bool:
+        if isinstance(other, BaseDTO):
+            # dirty-hack to retrieve items from priority queue
+            return False
+        raise TypeError()
 
 
 __all__ = [
-    "BaseModel",
-    "MountSpec",
-    "PathSpec",
-    "SecretSpec",
+    "base_model_config",
+    "SecretEngineMixin",
+    "PathMixin",
     "BaseDTO",
 ]
