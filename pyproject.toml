@@ -35,7 +35,8 @@ dependencies = [
   "lazy-object-proxy~=1.9.0",
   "jinja~=3.1.2",
   "networkx~=3.2.1",
-  "more-itertools~=10.1.0"
+  "more-itertools~=10.1.0",
+  "ironfence~=0.1.0"
 ]
 version = "0.1.0"
 
