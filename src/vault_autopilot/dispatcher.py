@@ -1,7 +1,9 @@
 import asyncio
 import logging
 from dataclasses import InitVar, dataclass, field
-from typing import Any, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
+
+import annotated_types
 
 from . import dto, parser, processor, state, util
 from ._pkg import asyva
@@ -21,19 +23,20 @@ class Dispatcher:
 
     Args:
         queue: The queue containing requests to be processed.
-        max_dispatch: The maximum number of requests that can be dispatched & processed
-            concurrently.
+        max_dispatch: The maximum number of requests that can be dispatched and
+            processed concurrently. For proper functioning, this value should be greater
+            than or equal to 3.
     """
 
     queue: parser.QueueType
     client: InitVar[asyva.Client]
-    max_dispatch: InitVar[int] = 64
+    max_dispatch: InitVar[Annotated[int, annotated_types.Ge(3)]] = 64
 
     _sem: asyncio.Semaphore = field(init=False)
     _pending_tasks: set[asyncio.Task[None]] = field(init=False, default_factory=set)
 
     def __post_init__(self, client: asyva.Client, max_dispatch: int) -> None:
-        self._sem = asyncio.Semaphore(max_dispatch + 2)
+        self._sem = asyncio.Semaphore(max_dispatch)
 
         # Initialize processors
         self._payload_proc_map: dict[Any, Any] = {
