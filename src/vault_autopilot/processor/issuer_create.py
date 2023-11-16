@@ -52,20 +52,20 @@ class IssuerCreateProcessor:
         self,
         predecessor: IssuerNode,
     ) -> None:
-        unsatisfied_sucrs: tuple[IssuerNode, ...] = tuple()
+        async with self.state.dep_mgr.lock() as mgr:
+            for sucr in (
+                unsatisfied_sucrs := tuple(mgr.find_unsatisfied_nodes(predecessor))
+            ):
+                mgr.update_status(
+                    predecessor=predecessor, successor=sucr, status="in_process"
+                )
 
         async with asyncio.TaskGroup() as tg:
-            async with self.state.dep_mgr.lock() as mgr:
-                for sucr in (
-                    unsatisfied_sucrs := tuple(mgr.find_unsatisfied_nodes(predecessor))
-                ):
-                    logger.debug("creating task for successor %r", hash(sucr))
-                    mgr.update_status(
-                        predecessor=predecessor, successor=sucr, status="in_process"
-                    )
-                    await util.coro.create_task_throttled(
-                        tg, self.sem, self._process(sucr.payload)
-                    )
+            for sucr in unsatisfied_sucrs:
+                logger.debug("creating task for successor %r", hash(sucr))
+                await util.coro.create_task_throttled(
+                    tg, self.sem, self._process(sucr.payload)
+                )
 
         if not unsatisfied_sucrs:
             logger.debug("no outbound edges were found for node %r", hash(predecessor))
