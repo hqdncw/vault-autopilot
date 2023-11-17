@@ -137,12 +137,10 @@ class IssuerCreateProcessor:
         cyclic dependencies. May lead to errors, but provides valuable insights for
         resolution.
         """
-        pending_tasks: set[asyncio.Task[Any]] = set()
-
         async with asyncio.TaskGroup() as tg:
             async with self.state.dep_mgr.lock() as mgr:
                 for node in mgr.find_all_unsatisfied_nodes():
                     logger.debug("force node to be processed: %r", node)
-                    task = tg.create_task(self._process(node.payload))
-                    pending_tasks.add(task)
-                    task.add_done_callback(pending_tasks.discard)
+                    await util.coro.create_task_throttled(
+                        tg, self.sem, self._process(node.payload)
+                    )
