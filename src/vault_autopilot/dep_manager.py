@@ -103,20 +103,22 @@ class DependencyManager(Generic[T]):
             ):
                 yield nbr
 
-    def find_all_unsatisfied_nodes(self) -> Iterator[T]:
+    def find_all_unsatisfied_nodes(self) -> set[T]:
         """
         Yields all nodes in the graph that have at least one unsatisfied inbound edge.
         In other words, these are nodes that have incoming edges that have the
         "unsatisfied" status. This can be useful for identifying nodes that are not part
         of any connected component or cycle in the graph.
         """
-        return map(
-            lambda edge: self._nodes[edge[1]],
-            filter(
-                lambda edge: self._edge_is_unsatisfied(
-                    edge  # pyright: ignore[reportGeneralTypeIssues]
-                )
-                and edge[1] in self._nodes,
-                iter(self._graph.in_edges(data=True, default={})),
-            ),
+        return set(
+            map(
+                lambda edge: self._nodes[edge[1]],
+                filter(
+                    lambda edge: self._edge_is_unsatisfied(
+                        edge  # pyright: ignore[reportGeneralTypeIssues]
+                    )
+                    and edge[1] in self._nodes,
+                    iter(self._graph.in_edges(data=True, default={})),
+                ),
+            )
         )
