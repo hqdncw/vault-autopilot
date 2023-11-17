@@ -3,6 +3,7 @@ import http
 import logging
 import pathlib
 from dataclasses import dataclass
+from typing import Literal
 
 import aiohttp
 import pydantic
@@ -57,15 +58,28 @@ class KubernetesAuthenticator(AbstractAuthenticator):
 @dataclass(slots=True)
 class TokenAuthenticator(AbstractAuthenticator):
     token: pydantic.SecretStr
+    source: Literal["directvalue", "filebasedvalue"] = "directvalue"
 
     async def authenticate(self, sess: aiohttp.ClientSession) -> pydantic.SecretStr:
         """
         References:
             https://developer.hashicorp.com/vault/api-docs/auth/token#lookup-a-token-self
         """
+        # The token is either a string or a file containing the string.
+        match self.source:
+            case "directvalue":
+                token = self.token.get_secret_value()
+            case "filebasedvalue":
+                token = read_jwt(self.token.get_secret_value())
+            case _:
+                raise NotImplementedError(
+                    "Invalid token source specified: %r. Supported sources include "
+                    "'directvalue' and `'filebasedvalue'." % self.source
+                )
+
         resp = await sess.get(
             "/v1/auth/token/lookup-self",
-            headers={constants.AUTHORIZATION_HEADER: self.token.get_secret_value()},
+            headers={constants.AUTHORIZATION_HEADER: token},
         )
 
         match resp.status:
