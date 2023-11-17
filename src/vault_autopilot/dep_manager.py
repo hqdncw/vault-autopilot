@@ -41,7 +41,7 @@ class DependencyManager(Generic[T]):
         raise ValueError("Edge not found (u: %r, v: %r)" % (u, v))
 
     @staticmethod
-    def _edge_is_unsatisfied(edge: tuple[int, int, dict[Any, Any]]) -> bool:
+    def _edge_is_unsatisfied(edge: tuple[Any, Any, dict[Any, Any]]) -> bool:
         return bool(edge[2].get("status") == "unsatisfied")
 
     def _get_orphan_nodes(self) -> Iterator[int]:
@@ -111,13 +111,12 @@ class DependencyManager(Generic[T]):
         of any connected component or cycle in the graph.
         """
         return map(
-            lambda edge: self._nodes[
-                edge[2]  # pyright: ignore[reportGeneralTypeIssues]
-            ],
+            lambda edge: self._nodes[edge[1]],
             filter(
-                self._edge_is_unsatisfied,  # pyright: ignore[reportGeneralTypeIssues]
-                iter(
-                    self._graph.in_edges(data=True, default={})
-                ),  # pyright: ignore[reportGeneralTypeIssues]
+                lambda edge: self._edge_is_unsatisfied(
+                    edge  # pyright: ignore[reportGeneralTypeIssues]
+                )
+                and edge[1] in self._nodes,
+                iter(self._graph.in_edges(data=True, default={})),
             ),
         )
