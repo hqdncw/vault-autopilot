@@ -1,7 +1,7 @@
 import abc
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Generic, Iterator, Literal, NoReturn, Optional, TypeVar
+from typing import Any, Generic, Iterator, Literal, NoReturn, TypeVar
 
 import more_itertools
 import networkx as nx
@@ -75,7 +75,7 @@ class DependencyManager(Generic[T]):
         except IndexError:
             self._raise_edge_not_found_exc(predecessor, successor)
 
-    def get_edge_status(self, predecessor: T, successor: T) -> Optional[EdgeStatusType]:
+    def get_edge_status(self, predecessor: T, successor: T) -> EdgeStatusType:
         try:
             return self._graph[hash(predecessor)][hash(successor)]["status"]  # type: ignore[no-any-return]
         except IndexError:
