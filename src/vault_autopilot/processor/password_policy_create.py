@@ -4,7 +4,7 @@ from .. import dto, state
 
 
 @dataclass(slots=True)
-class PassowrdPolicyCreateProcessor:
+class PasswordPolicyCreateProcessor:
     state: state.PasswordPolicyState
 
     async def process(self, payload: dto.PasswordPolicyCreateDTO) -> None:

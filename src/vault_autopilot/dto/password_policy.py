@@ -1,8 +1,9 @@
-from pydantic.dataclasses import dataclass
+from typing import Literal
+
 from typing_extensions import TypedDict
 
 from .._pkg.asyva.dto import password_policy
-from . import base
+from . import abstract
 
 
 class PasswordPolicySpec(TypedDict):
@@ -10,6 +11,6 @@ class PasswordPolicySpec(TypedDict):
     policy_params: password_policy.PasswordPolicy
 
 
-@dataclass(slots=True)
-class PasswordPolicyCreateDTO(base.BaseDTO):
+class PasswordPolicyCreateDTO(abstract.AbstractDTO):
+    kind: Literal["PasswordPolicy"]
     spec: PasswordPolicySpec

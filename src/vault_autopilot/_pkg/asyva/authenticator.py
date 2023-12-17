@@ -10,6 +10,9 @@ import pydantic
 
 from . import constants, exc
 
+__all__ = "AbstractAuthenticator", "KubernetesAuthenticator", "TokenAuthenticator"
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,8 +23,11 @@ def read_jwt(fn: str) -> str:
 @dataclass(slots=True)
 class AbstractAuthenticator(abc.ABC):
     """
-    An abstract class that defines the interface for authenticating with the Auth
+    An abstract class that defines the interface for authenticating with the Vault Auth
     Method.
+
+    See Also:
+        https://developer.hashicorp.com/vault/docs/auth
     """
 
     @abc.abstractmethod
@@ -95,6 +101,3 @@ class TokenAuthenticator(AbstractAuthenticator):
         raise await exc.VaultAPIError.from_response(
             "Failed to authenticate with provided token", resp
         )
-
-
-__all__ = "AbstractAuthenticator", "KubernetesAuthenticator", "TokenAuthenticator"

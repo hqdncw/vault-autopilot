@@ -1,14 +1,15 @@
-from typing import Any
+from typing import Any, NotRequired
 
-from typing_extensions import NotRequired
-
-from . import base
+from typing_extensions import TypedDict
 
 
-class SecretCreateDTO(base.PathMixin, base.MountPathMixin):
+class SecretCreateDTO(TypedDict):
+    path: str
     data: dict[str, Any]
     cas: NotRequired[int]
+    mount_path: str
 
 
-class SecretGetVersionDTO(base.PathMixin, base.MountPathMixin):
-    pass
+class SecretGetVersionDTO(TypedDict):
+    mount_path: str
+    path: str

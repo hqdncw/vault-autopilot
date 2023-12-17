@@ -1,3 +1,3 @@
-from . import coro, encoding, pydantic
+from . import coro, dep_manager, encoding, model
 
-__all__ = ["pydantic", "encoding", "coro"]
+__all__ = ("encoding", "coro", "model", "dep_manager")

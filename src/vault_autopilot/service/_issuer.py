@@ -13,61 +13,65 @@ class IssuerService:
 
     async def _create_intmd_issuer(self, payload: dto.IssuerCreateDTO) -> None:
         mount_path, csr_params, iss_params = (
-            payload.spec.get("secret_engine"),
-            payload.spec.get("csr_params"),
-            payload.spec.get("issuance_params"),
+            payload["spec"]["secret_engine"],
+            payload["spec"]["csr_params"],
+            payload["spec"].get("issuance_params"),
         )
-        assert (
-            iss_params and csr_params and mount_path
-        ), "Issuance params must not be null"
 
-        res = await self.client.set_signed_intermediate(
+        assert iss_params is not None, "Issuance params must not be null"
+
+        root_ref = iss_params["issuer_ref"].split("/", maxsplit=1)
+        result = await self.client.set_signed_intermediate(
             certificate=(
                 await self.client.sign_intermediate(
-                    mount_path=iss_params["issuer_ref"]["secret_engine"],
-                    issuer_ref=iss_params["issuer_ref"]["issuer_name"],
+                    mount_path=root_ref[0],  # PKI engine mount path
+                    issuer_ref=root_ref[1],  # Issuer name
                     csr=(
                         await self.client.generate_intermediate_csr(
-                            mount_path=mount_path,
-                            **util.pydantic.model_dump(
-                                csr_params,
-                                exclude_unset=True,
-                            ),
+                            mount_path=mount_path, **csr_params
                         )
                     ).data["csr"],
                     use_csr_values=True,
-                    **util.pydantic.model_dump(
-                        iss_params, exclude={"issuer_ref"}, exclude_unset=True
-                    ),
+                    **util.model.model_dump(iss_params, exclude={"issuer_ref"}),
                 )
             ).data["certificate"],
             mount_path=mount_path,
         )
 
-        if not (
-            (imported_issuers := res.data.get("imported_issuers"))
-            and len(imported_issuers) == 1
-        ):
-            raise RuntimeError(
-                "Expected one issuer only to be imported, got %r" % imported_issuers
-            )
+        imported_issuers = result.data.get("imported_issuers", [])
+        assert len(imported_issuers) == 1, (
+            "Expected one issuer only to be imported, got: %r" % imported_issuers
+        )
 
+        # Set issuer name
         await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
-            issuer_name=csr_params["issuer_name"],
-            mount_path=payload.spec["secret_engine"],
+            issuer_name=payload["spec"]["name"],
+            mount_path=payload["spec"]["secret_engine"],
         )
 
     async def _create_root_issuer(self, payload: dto.IssuerCreateDTO) -> None:
-        spec, csr_params = payload.spec, payload.spec["csr_params"]
+        spec = payload["spec"]
+
         await self.client.generate_root(
+            issuer_name=spec["name"],
             mount_path=spec["secret_engine"],
-            **util.pydantic.model_dump(csr_params, exclude_unset=True),
+            **util.model.model_dump(
+                spec["csr_params"],
+                exclude={"add_basic_constraints"},
+            ),
         )
 
     async def create(self, payload: dto.IssuerCreateDTO) -> None:
-        if payload.spec.get("issuance_params"):
+        spec = payload["spec"]
+
+        if spec.get("issuance_params"):
             await self._create_intmd_issuer(payload)
         else:
             await self._create_root_issuer(payload)
-        logger.debug("issuer %r created" % payload.get_full_path())
+
+        logger.debug(
+            "created issuer at path: %r (secret_engine: %r)",
+            spec["name"],
+            spec["secret_engine"],
+        )

@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Iterable, NotRequired, Optional
 
 import aiohttp
+from typing_extensions import TypedDict
 
 
 @dataclass(slots=True)
@@ -137,7 +138,7 @@ class PasswordPolicyNotFoundError(VaultAPIError):
     """
     Raised when a password policy is not found.
 
-    Attrs:
+    Args:
         policy_name: The name of the required password policy.
     """
 
@@ -164,19 +165,18 @@ class CASParameterMismatchError(VaultAPIError):
         https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#cas.
     """
 
-    secret_path: str
-    provided_cas: Optional[int] = None
-    required_cas: Optional[int] = None
+    class Context(TypedDict):
+        secret_path: str
+        provided_cas: NotRequired[int]
+        required_cas: NotRequired[int]
+
+    ctx: Context
 
     def __str__(self) -> str:
         return self.message.format(
-            secret_path=self.secret_path,
-            provided_cas=self.provided_cas
-            if isinstance(self.provided_cas, int)
-            else "not set",
-            required_cas=self.required_cas
-            if isinstance(self.required_cas, int)
-            else "unknown",
+            secret_path=self.ctx["secret_path"],
+            provided_cas=self.ctx.get("provided_cas", "not set"),
+            required_cas=self.ctx.get("provided_cas", "unknown"),
         )
 
 
@@ -188,14 +188,18 @@ class IssuerNameTakenError(VaultAPIError):
     Attributes:
         message: A human-readable message describing the error.
         issuer_name: The name of the conflicting issuer.
-        pki_mount_path:
-            The path of the mounted Vault PKI where the creation attempt was made.
+        secret_engine: The path of the mounted PKI engine where the creation attempt was
+            made.
     """
 
-    issuer_name: str
-    pki_mount_path: str
+    class Context(TypedDict):
+        issuer_name: str
+        secret_engine: str
+
+    ctx: Context
 
     def __str__(self) -> str:
         return self.message.format(
-            issuer_name=self.issuer_name, pki_mount_path=self.pki_mount_path
+            issuer_name=self.ctx["issuer_name"],
+            secret_engine=self.ctx["secret_engine"],
         )

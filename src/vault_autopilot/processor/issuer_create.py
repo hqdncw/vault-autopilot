@@ -1,9 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
-
-from vault_autopilot import dep_manager
+from typing import Union
 
 from .. import dto, state, util
 
@@ -11,32 +9,50 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class IssuerNode(dep_manager.AbstractNode):
-    payload: Any
-    is_ref: bool
+class Node(util.dep_manager.AbstractNode):
+    payload: dto.IssuerCreateDTO
 
     def __hash__(self) -> int:
-        return hash(self.payload)
+        return hash("{0[secret_engine]}/{0[name]}".format(self.payload["spec"]))
 
     @classmethod
-    def create_from_payload(cls, payload: dto.IssuerCreateDTO) -> "IssuerNode":
+    def from_payload(cls, payload: dto.IssuerCreateDTO) -> "Node":
         """
-        Creates a new instance of the class.
+        Creates a node from given payload.
 
         Args:
-            payload: The payload containing the information to create the IssuerNode.
+            payload: The payload containing the information to create the node.
             status: The initial status of the node.
         """
-        return cls(payload, False)
+        return cls(payload)
+
+
+@dataclass(slots=True)
+class NodeReference:
+    """A reference to a :class:`Node` object. This allows for efficient ordering of
+    dependencies even when the issuer's details are not yet available.
+
+    Args:
+        node_hash: The hash of the referenced node."""
+
+    node_hash: int
+
+    def __hash__(self) -> int:
+        return self.node_hash
 
     @classmethod
-    def create_reference(cls, path: str) -> "IssuerNode":
+    def from_issuer_ref(cls, issuer_ref: str) -> "NodeReference":
         """
-        Creates a reference to an issuer node without fully loading its details. This
-        allows for efficient ordering of dependencies even when the issuer's details are
-        not yet available.
+        Creates a reference to a node.
+
+        Args:
+            issuer_ref: The PKI engine mount path followed by the issuer name, separated
+                by a forward slash. For example: ``pki/my-issuer``.
         """
-        return cls(path, True)
+        return cls(hash(issuer_ref))
+
+
+NodeType = Union[Node, NodeReference]
 
 
 @dataclass(slots=True)
@@ -48,9 +64,14 @@ class IssuerCreateProcessor:
         """Processes the given payload."""
         await self.state.iss_svc.create(payload)
 
+    async def _create_task(
+        self, tg: asyncio.TaskGroup, payload: dto.IssuerCreateDTO
+    ) -> None:
+        await util.coro.create_task_throttled(tg, self.sem, self._process(payload))
+
     async def _fulfill_unsatisfied_successors(
         self,
-        predecessor: IssuerNode,
+        predecessor: NodeType,
     ) -> None:
         async with self.state.dep_mgr.lock() as mgr:
             for sucr in (
@@ -63,9 +84,8 @@ class IssuerCreateProcessor:
         async with asyncio.TaskGroup() as tg:
             for sucr in unsatisfied_sucrs:
                 logger.debug("creating task for successor %r", hash(sucr))
-                await util.coro.create_task_throttled(
-                    tg, self.sem, self._process(sucr.payload)
-                )
+                assert isinstance(sucr, Node)
+                await self._create_task(tg, sucr.payload)
 
         if not unsatisfied_sucrs:
             logger.debug("no outbound edges were found for node %r", hash(predecessor))
@@ -82,39 +102,34 @@ class IssuerCreateProcessor:
 
     async def process(self, payload: dto.IssuerCreateDTO) -> None:
         """
-        Schedules a request to create a new issuer on the Vault server. The payload
-        should contain information about the issuer, such as its name and any relevant
-        issuance parameters.
+        Schedule creation of a new issuer on the Vault server.
 
-        If the payload includes issuance parameters, we first check if the specified
-        Certificate Authority (CA) already exists on the Vault server. If it does, we
-        schedule all known successors linked to that CA, including the current one, to
-        be created on the Vault server. This sets up a proper dependency chain between
-        the new issuer and the existing CA hierarchy, allowing the new issuer to issue
-        certificates that chain up to the root CA.
+        If the payload includes issuance parameters, the function will:
 
-        If the payload doesn't include issuance parameters, we schedule the issuer with
-        the given payload to be created immediately, without establishing any
-        dependencies. In this case, the new issuer is self-signed, meaning it issues its
-        own certificate without relying on any other issuer or CA hierarchy.
+            - Check if the root issuer already exists on the Vault server.
+            - If the root issuer exists, schedule all known intermediates, including the
+              current one, to be created on the Vault server, setting up a proper
+              dependency chain.
+            - If the root issuer does not exist, create the given intermediate issuer
+              later when the root CA is set up.
 
-        If the payload contains issuance parameters but the issuing CA hasn't been set
-        up on the Vault server yet, we'll create the dependent issuer (using the
-        provided payload) at a later time when the CA hierarchy is established.
+        If the payload does not include issuance parameters, the function will create
+        the issuer immediately without establishing dependencies.
 
         Args:
-            payload: The IssuerCreateDTO containing the information about the new
-                issuer.
+            payload: The payload containing the information about the new issuer.
+
+        See also:
+            :meth:`postprocess`
         """
-        if not (iss_params := bool(payload.spec.get("issuance_params"))):
+        if not (iss_params := payload["spec"].get("issuance_params")):
             await self._process(payload)
 
         async with self.state.dep_mgr.lock() as mgr:
+            predecessor: NodeType
             if iss_params:
-                successor = IssuerNode.create_from_payload(payload)
-                predecessor = IssuerNode.create_reference(
-                    payload.get_issuing_authority_full_path()
-                )
+                successor = Node.from_payload(payload)
+                predecessor = NodeReference.from_issuer_ref(iss_params["issuer_ref"])
                 mgr.add_node(successor)
                 mgr.add_edge(predecessor, successor, "unsatisfied")
 
@@ -125,22 +140,20 @@ class IssuerCreateProcessor:
                     # skip creating successors as the predecessor is not yet available
                     return
             else:
-                predecessor = IssuerNode.create_from_payload(payload)
+                predecessor = Node.from_payload(payload)
                 mgr.add_node(predecessor)
 
         await self._fulfill_unsatisfied_successors(predecessor)
 
     async def postprocess(self) -> None:
         """
-        Forces the creation of issuers with unsatisfied dependencies. This can be useful
-        in certain scenarios, such as when the issuer is not recognized or there are
-        cyclic dependencies. May lead to errors, but provides valuable insights for
-        resolution.
+        Forces creation of issuers with unsatisfied dependencies, aiding in resolving
+        recognition and cyclic dependency issues, but may cause errors and requires
+        careful analysis for resolution.
         """
         async with asyncio.TaskGroup() as tg:
             async with self.state.dep_mgr.lock() as mgr:
                 for node in mgr.find_all_unsatisfied_nodes():
+                    assert isinstance(node, Node)
                     logger.debug("force node to be processed: %r", node)
-                    await util.coro.create_task_throttled(
-                        tg, self.sem, self._process(node.payload)
-                    )
+                    await self._create_task(tg, node.payload)

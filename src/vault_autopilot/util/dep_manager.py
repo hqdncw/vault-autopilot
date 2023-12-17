@@ -42,7 +42,7 @@ class DependencyManager(Generic[T]):
 
     @staticmethod
     def _edge_is_unsatisfied(edge: tuple[Any, Any, dict[Any, Any]]) -> bool:
-        return bool(edge[2].get("status") == "unsatisfied")
+        return edge[2].get("status") == "unsatisfied"
 
     def _get_orphan_nodes(self) -> Iterator[int]:
         return (orphan[0] for orphan in self._graph.in_degree if orphan[1] == 0)
@@ -51,7 +51,7 @@ class DependencyManager(Generic[T]):
         hash_ = hash(node)
         self._graph.add_node(hash_)
         self._nodes.update({hash_: node})
-        logger.debug("add node %r (payload: %r)" % (hash_, node))
+        logger.debug("add node %r (payload: %r)", hash_, node)
 
     def add_edge(
         self,
@@ -65,7 +65,7 @@ class DependencyManager(Generic[T]):
         """
         pred_hash, sucr_hash = hash(predecessor), hash(successor)
         self._graph.add_edge(pred_hash, sucr_hash, status=status)
-        logger.debug("add edge (%r, %r)" % (pred_hash, sucr_hash))
+        logger.debug("add edge (%r, %r)", pred_hash, sucr_hash)
 
     def update_status(
         self, predecessor: T, successor: T, status: EdgeStatusType

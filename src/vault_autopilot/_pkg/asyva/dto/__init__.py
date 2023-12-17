@@ -6,7 +6,6 @@ from .issuer import (
     IssuerUpdateDTO,
     KeyUpdateDTO,
 )
-from .password_policy import PasswordPolicyCreateDTO, PasswordPolicyGenerateDTO
 from .secret import SecretCreateDTO, SecretGetVersionDTO
 
 __all__ = (
@@ -16,8 +15,6 @@ __all__ = (
     "IssuerSignIntmdDTO",
     "IssuerUpdateDTO",
     "KeyUpdateDTO",
-    "PasswordPolicyCreateDTO",
-    "PasswordPolicyGenerateDTO",
     "SecretCreateDTO",
     "SecretGetVersionDTO",
 )

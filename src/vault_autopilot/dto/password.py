@@ -1,28 +1,23 @@
-from typing import Literal
+from typing import Annotated, Literal
 
+import annotated_types
 import pydantic
-from pydantic.dataclasses import dataclass
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import TypedDict
 
-from . import base
+from . import abstract
 
 StringEncodingType = Literal["base64", "utf8"]
 
 
-class PasswordSecretKeys(TypedDict):
+class PasswordSpec(TypedDict):
+    secret_engine: str
+    path: str
     secret_key: str
-
-
-class PasswordSpec(base.SecretEngineMixin, base.PathMixin):
-    secret_keys: PasswordSecretKeys
     policy_path: str
-    cas: Annotated[int, pydantic.Field(ge=0)]
+    cas: Annotated[int, annotated_types.Ge(0)]
     encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
 
 
-@dataclass(slots=True)
-class PasswordCreateDTO(base.BaseDTO):
+class PasswordCreateDTO(abstract.AbstractDTO):
+    kind: Literal["Password"]
     spec: PasswordSpec
-
-    def full_path(self) -> str:
-        return "{0[secret_engine]}/{0[secret_keys][secret_key]}".format(self.spec)

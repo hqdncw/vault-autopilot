@@ -1,50 +1,55 @@
 import http
 import logging
-from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
-from typing_extensions import Unpack
-
-from .... import util
 from .. import constants, dto, exc
 from . import base
 
 logger = logging.getLogger(__name__)
 
-SECRET_EXCL = {"mount_path", "path"}
 
-
-@dataclass
 class KVV2Manager(base.BaseManager):
-    async def create_or_update(self, **payload: Unpack[dto.SecretCreateDTO]) -> None:
-        data: dict[str, Any] = dict(
-            data=util.pydantic.model_dump_json(
-                payload, exclude=SECRET_EXCL, exclude_unset=True
-            )
+    async def create_or_update(self, payload: dto.SecretCreateDTO) -> None:
+        """
+        References:
+            https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
+        """
+        data, mount_path, path = (
+            {"data": payload["data"]},
+            payload["mount_path"],
+            payload["path"],
         )
+
         if isinstance((cas := payload.get("cas")), int):
-            data.update(dict(options=dict(cas=cas)))
+            data.update({"options": {"cas": cas}})
 
         async with self.new_session() as sess:
-            resp = await sess.post(
-                "/v1/{0[mount_path]}/data/{0[path]}".format(payload),
-                data=data,
-            )
+            resp = await sess.post("/v1/%s/data/%s" % (mount_path, path), json=data)
 
         if resp.status == http.HTTPStatus.OK:
             return
 
         resp_body = await resp.json()
         if constants.CAS_MISMATCH in resp_body["errors"]:
-            mount_path, path = payload["mount_path"], payload["path"]
+            ctx = exc.CASParameterMismatchError.Context(
+                secret_path="/".join((mount_path, path))
+            )
+
+            if cas is not None:
+                ctx.update({"provided_cas": cas})
 
             try:
-                required_cas = await self.get_version(path=path, mount_path=mount_path)
+                ctx.update(
+                    {
+                        "required_cas": await self.get_version(
+                            dto.SecretGetVersionDTO(mount_path=mount_path, path=path)
+                        )
+                    }
+                )
             except exc.InvalidPathError:
-                required_cas = 0
-            except Exception as ex:
-                logger.debug(ex, exc_info=ex)
-                required_cas = None
+                ctx.update({"required_cas": 0})
+            except exc.VaultAPIError as ex:
+                logger.debug("Failed to fetch the required cas value", exc_info=ex)
 
             raise exc.CASParameterMismatchError(
                 message=(
@@ -52,9 +57,7 @@ class KVV2Manager(base.BaseManager):
                     "(expected {required_cas!r}, got {provided_cas!r}). Ensure correct "
                     "CAS value and try again"
                 ),
-                secret_path="/".join((mount_path, path)),
-                provided_cas=cas,
-                required_cas=required_cas,
+                ctx=ctx,
             )
 
         logger.debug(resp_body)
@@ -62,10 +65,10 @@ class KVV2Manager(base.BaseManager):
             "Failed to create/update secret", resp
         )
 
-    async def get_version(self, **payload: Unpack[dto.SecretGetVersionDTO]) -> int:
+    async def get_version(self, payload: dto.SecretGetVersionDTO) -> int:
         async with self.new_session() as sess:
             resp = await sess.get(
-                "/v1/{0[mount_path]}/metadata/{0[path]}".format(payload)
+                "/v1/%s/metadata/%s" % (payload["mount_path"], payload["path"])
             )
 
         resp_body = await resp.json()

@@ -1,7 +1,16 @@
 import functools
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Optional, ParamSpec, TypeVar, overload
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Optional,
+    ParamSpec,
+    TypeVar,
+    Union,
+    overload,
+)
 
 import aiohttp
 import jinja2
@@ -125,21 +134,20 @@ class Client:
         Args:
             path: The path to the secret.
             data: The new value for the secret.
-            cas: The expected version of the secret. If set to `None` the write will be
-                allowed. If set to `0` a write will only be allowed if the key doesn't
-                exist as unset keys do not have any version information.
+            cas: The expected version of the secret. If set to `None` (default) the
+                write will be allowed. If set to `0` a write will only be allowed if the
+                key doesn't exist as unset keys do not have any version information.
             mount_path: The path where the secret engine is mounted.
 
         Raises:
-            CASParameterMismatchError:
-                If the provided CAS value does not match the current version of the
-                secret.
+            CASParameterMismatchError: If the provided CAS value does not match the
+                current version of the secret.
 
         References:
-            See https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
-            for more information.
+            https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
+
         """
-        await self._kvv2_mgr.create_or_update(**payload)
+        await self._kvv2_mgr.create_or_update(payload)
 
     @overload
     async def create_or_update_password_policy(self, path: str, policy: str) -> None:
@@ -147,88 +155,82 @@ class Client:
 
     @overload
     async def create_or_update_password_policy(
-        self, path: str, **kwargs: Unpack[password_policy.PasswordPolicy]
+        self, path: str, policy: password_policy.PasswordPolicy
     ) -> None:
         ...
 
-    @exception_handler  # type: ignore[misc]
+    @exception_handler
     @login_required
     async def create_or_update_password_policy(
-        self,
-        path: str = "",
-        policy: str = "",
-        **kwargs: Unpack[password_policy.PasswordPolicy],
+        self, path: str, policy: Union[password_policy.PasswordPolicy, str]
     ) -> None:
         """
         Creates a new password policy or updates an existing one.
 
         Args:
             path: Path to the password policy.
-            payload:
-                The policy to create or update. Can be a string containing the policy in
-                HCL format or an instance of :class:`asyva.PasswordPolicy`.
+            policy: The policy to create or update. Can be a string containing the
+                policy in HCL format or an instance of :class:`asyva.PasswordPolicy`.
 
         References:
-            See https://developer.hashicorp.com/vault/api-docs/system/policies-password#create-update-password-policy
-            for more information.
+            https://developer.hashicorp.com/vault/api-docs/system/policies-password#create-update-password-policy
         """
         await self._pwd_policy_mgr.create_or_update(
             path=path,
             policy=(
-                await self._render_password_policy(policy=kwargs) if kwargs else policy
+                await self._render_password_policy(policy=policy)
+                if isinstance(policy, dict)
+                else policy
             ),
         )
 
     @exception_handler
     @login_required
-    async def generate_password(
-        self, **kwargs: Unpack[dto.PasswordPolicyGenerateDTO]
-    ) -> str:
+    async def generate_password(self, policy_path: str) -> str:
         """
         Generates a password from the specified existing password policy.
 
         References:
-            See https://developer.hashicorp.com/vault/api-docs/system/policies-password#generate-password-from-password-policy
-            for more information.
+            https://developer.hashicorp.com/vault/api-docs/system/policies-password#generate-password-from-password-policy
         """
-        return await self._pwd_policy_mgr.generate_password(**kwargs)
+        return await self._pwd_policy_mgr.generate_password(policy_path=policy_path)
 
     @exception_handler
     @login_required
     async def generate_root(
-        self, **kwargs: Unpack[dto.IssuerGenerateRootDTO]
+        self, **payload: Unpack[dto.IssuerGenerateRootDTO]
     ) -> pki.GenerateRootResult:
-        return await self._pki_mgr.generate_root(**kwargs)
+        return await self._pki_mgr.generate_root(payload)
 
     @exception_handler
     @login_required
     async def generate_intermediate_csr(
-        self, **kwargs: Unpack[dto.IssuerGenerateIntmdCSRDTO]
+        self, **payload: Unpack[dto.IssuerGenerateIntmdCSRDTO]
     ) -> pki.GenerateIntmdCSRResult:
-        return await self._pki_mgr.generate_intmd_csr(**kwargs)
+        return await self._pki_mgr.generate_intmd_csr(payload)
 
     @exception_handler
     @login_required
     async def sign_intermediate(
-        self, **kwargs: Unpack[dto.IssuerSignIntmdDTO]
+        self, **payload: Unpack[dto.IssuerSignIntmdDTO]
     ) -> pki.SignIntmdResult:
-        return await self._pki_mgr.sign_intmd(**kwargs)
+        return await self._pki_mgr.sign_intmd(payload)
 
     @exception_handler
     @login_required
     async def set_signed_intermediate(
-        self, **kwargs: Unpack[dto.IssuerSetSignedIntmdDTO]
+        self, **payload: Unpack[dto.IssuerSetSignedIntmdDTO]
     ) -> pki.SetSignedIntmdResult:
-        return await self._pki_mgr.set_signed_intmd(**kwargs)
+        return await self._pki_mgr.set_signed_intmd(payload)
 
     @exception_handler
     @login_required
-    async def update_key(self, **kwargs: Unpack[dto.KeyUpdateDTO]) -> None:
-        return await self._pki_mgr.update_key(**kwargs)
+    async def update_key(self, **payload: Unpack[dto.KeyUpdateDTO]) -> None:
+        return await self._pki_mgr.update_key(payload)
 
     @exception_handler
     @login_required
     async def update_issuer(
-        self, **kwargs: Unpack[dto.IssuerUpdateDTO]
+        self, **payload: Unpack[dto.IssuerUpdateDTO]
     ) -> pki.UpdateResult:
-        return await self._pki_mgr.update_issuer(**kwargs)
+        return await self._pki_mgr.update_issuer(payload)

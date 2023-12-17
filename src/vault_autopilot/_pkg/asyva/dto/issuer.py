@@ -1,15 +1,15 @@
-from typing import Literal
+from typing import Annotated, Literal, NotRequired, Sequence
 
 import pydantic
-from typing_extensions import Annotated, NotRequired, TypedDict
-
-from . import base
+from typing_extensions import TypedDict
 
 IssuerType = Literal["root", "intermediate"]
 IssuerCertType = Literal["internal", "exported", "existing", "kms"]
 KeyType = Literal["rsa", "ed25519", "ec"]
 LeafNotAfterBehaviorType = Literal["err", "truncate", "permit"]
-UsageType = Literal["read-only", "issuing-certificates", "crl-signing", "ocsp-signing"]
+UsageType = Sequence[
+    Literal["read-only", "issuing-certificates", "crl-signing", "ocsp-signing"]
+]
 SignatureAlgorithmType = Literal[
     "MD5WithRSA",
     "SHA1WithRSA",
@@ -27,7 +27,7 @@ SignatureAlgorithmType = Literal[
 ]
 
 
-class CACommonFieldsMixin(TypedDict):
+class CommonFields(TypedDict):
     common_name: str
     alt_names: NotRequired[str]
     ip_sans: NotRequired[str]
@@ -49,7 +49,7 @@ class CACommonFieldsMixin(TypedDict):
     not_after: NotRequired[str]
 
 
-class CAKeyGenerationMixin(TypedDict):
+class KeyGenerationFields(TypedDict):
     type_: Annotated[IssuerCertType, pydantic.Field(alias="type")]
     key_name: NotRequired[str]
     key_ref: NotRequired[str]
@@ -57,29 +57,36 @@ class CAKeyGenerationMixin(TypedDict):
     key_bits: NotRequired[int]
 
 
-class IssuerNameMixin(TypedDict):
+class ManagedKeyFields(TypedDict):
+    managed_key_name: NotRequired[str]
+    managed_key_id: NotRequired[str]
+
+
+class MountPathField(TypedDict):
+    mount_path: str
+
+
+class IssuerNameField(TypedDict):
     issuer_name: NotRequired[str]
 
 
-class IssuerRefMixin(TypedDict):
+class IssuerRefField(TypedDict):
     issuer_ref: str
 
 
 class IssuerGenerateRootDTO(
-    CACommonFieldsMixin, CAKeyGenerationMixin, IssuerNameMixin, base.MountPathMixin
+    CommonFields, KeyGenerationFields, ManagedKeyFields, MountPathField, IssuerNameField
 ):
     pass
 
 
 class IssuerGenerateIntmdCSRDTO(
-    CACommonFieldsMixin, CAKeyGenerationMixin, base.MountPathMixin
+    CommonFields, KeyGenerationFields, ManagedKeyFields, MountPathField
 ):
     add_basic_constraints: NotRequired[bool]
-    managed_key_name: NotRequired[str]
-    managed_key_id: NotRequired[str]
 
 
-class IssuerSignIntmdDTO(CACommonFieldsMixin, IssuerRefMixin, base.MountPathMixin):
+class IssuerSignIntmdDTO(CommonFields, MountPathField, IssuerRefField):
     csr: str
     use_csr_values: NotRequired[bool]
     signature_bits: NotRequired[int]
@@ -87,7 +94,7 @@ class IssuerSignIntmdDTO(CACommonFieldsMixin, IssuerRefMixin, base.MountPathMixi
     use_pss: NotRequired[bool]
 
 
-class IssuerUpdateDTO(IssuerRefMixin, IssuerNameMixin, base.MountPathMixin):
+class IssuerUpdateDTO(MountPathField, IssuerNameField, IssuerRefField):
     leaf_not_after_behavior: NotRequired[LeafNotAfterBehaviorType]
     manual_chain: NotRequired[tuple[str]]
     usage: NotRequired[UsageType]
@@ -98,10 +105,10 @@ class IssuerUpdateDTO(IssuerRefMixin, IssuerNameMixin, base.MountPathMixin):
     enable_aia_url_templating: NotRequired[bool]
 
 
-class IssuerSetSignedIntmdDTO(base.MountPathMixin):
+class IssuerSetSignedIntmdDTO(MountPathField):
     certificate: str
 
 
-class KeyUpdateDTO(base.MountPathMixin):
+class KeyUpdateDTO(MountPathField):
     key_ref: str
     key_name: str
