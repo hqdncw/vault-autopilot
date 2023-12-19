@@ -32,21 +32,20 @@ class Dispatcher:
     max_dispatch: InitVar[Annotated[int, annotated_types.Ge(0)]] = 0
 
     _sem: asyncio.Semaphore = field(init=False)
-    _pending_tasks: set[asyncio.Task[None]] = field(init=False, default_factory=set)
 
     def __post_init__(self, client: asyva.Client, max_dispatch: int) -> None:
         self._sem = (
-            asyncio.Semaphore(max_dispatch + 1)
+            asyncio.Semaphore(max_dispatch)
             if max_dispatch > 0
             else util.coro.BoundlessSemaphore()
         )
+        self._is_concurrency_enabled = max_dispatch != 1
 
         # Initialize processors
         self._payload_proc_map: dict[str, Any] = {
             "Password": processor.PasswordCreateProcessor(state.PasswordState(client)),
             "Issuer": processor.IssuerCreateProcessor(
-                state.IssuerState(client),
-                self._sem if max_dispatch >= 3 else asyncio.Semaphore(2),
+                state.IssuerState(client), self._sem
             ),
             "PasswordPolicy": processor.PasswordPolicyCreateProcessor(
                 state.PasswordPolicyState(client)
@@ -66,12 +65,15 @@ class Dispatcher:
                 try:
                     proc = self._payload_proc_map[payload["kind"]]
                 except IndexError:
-                    raise NotImplementedError(
-                        "Unexpected request received (payload: %r)." % payload
+                    raise TypeError(
+                        "Unexpected request kind received: %r" % payload["kind"]
                     )
 
-                await util.coro.create_task_throttled(
-                    tg, self._sem, proc.process(payload)
-                )
+                coro = proc.process(payload)
+
+                if self._is_concurrency_enabled:
+                    await util.coro.create_task_limited(tg, self._sem, coro)
+                else:
+                    await coro
 
         await self._payload_proc_map["Issuer"].postprocess()

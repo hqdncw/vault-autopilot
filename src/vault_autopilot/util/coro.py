@@ -1,21 +1,35 @@
 import asyncio
+import functools
 from typing import Any, Coroutine, Literal
+
+__all__ = "create_task_limited", "BoundlessSemaphore"
 
 _pending_tasks: set[asyncio.Task[Any]] = set()
 
 
-async def throttle(sem: asyncio.Semaphore, coro: Coroutine[Any, Any, Any]) -> None:
-    async with sem:
-        await coro
+def _release_sem_and_remove_task(
+    task: asyncio.Task[Any], *, sem: asyncio.Semaphore
+) -> None:
+    sem.release()
+    _pending_tasks.discard(task)
 
 
-async def create_task_throttled(
+async def create_task_limited(
     tg: asyncio.TaskGroup, sem: asyncio.Semaphore, coro: Coroutine[Any, Any, Any]
 ) -> None:
-    async with sem:
-        task = tg.create_task(throttle(sem, coro))
-        _pending_tasks.add(task)
-        task.add_done_callback(_pending_tasks.discard)
+    """
+    Create a task and store a reference to it until the task completes, respecting a
+    semaphore limit.
+
+    Args:
+        tg: Task group to create the task in.
+        sem: Semaphore to acquire before creating the task.
+        coro: Coroutine to run as the task.
+    """
+    await sem.acquire()
+    task = tg.create_task(coro)
+    _pending_tasks.add(task)
+    task.add_done_callback(functools.partial(_release_sem_and_remove_task, sem=sem))
 
 
 class BoundlessSemaphore(asyncio.Semaphore):

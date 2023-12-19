@@ -67,12 +67,9 @@ class IssuerCreateProcessor:
     async def _create_task(
         self, tg: asyncio.TaskGroup, payload: dto.IssuerCreateDTO
     ) -> None:
-        await util.coro.create_task_throttled(tg, self.sem, self._process(payload))
+        await util.coro.create_task_limited(tg, self.sem, self._process(payload))
 
-    async def _fulfill_unsatisfied_successors(
-        self,
-        predecessor: NodeType,
-    ) -> None:
+    async def _fulfill_unsatisfied_successors(self, predecessor: NodeType) -> None:
         async with self.state.dep_mgr.lock() as mgr:
             for sucr in (
                 unsatisfied_sucrs := tuple(mgr.find_unsatisfied_nodes(predecessor))
