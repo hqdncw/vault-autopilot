@@ -1,8 +1,8 @@
 import pydantic.alias_generators
-from typing_extensions import TypedDict
+from pydantic import BaseModel, ConfigDict
 
 
-class AbstractDTO(TypedDict):
-    __pydantic_config__ = pydantic.ConfigDict(  # type: ignore[misc]
+class AbstractDTO(BaseModel):
+    model_config = ConfigDict(
         alias_generator=pydantic.alias_generators.to_camel, extra="forbid"
     )

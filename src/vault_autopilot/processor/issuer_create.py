@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from dataclasses import dataclass
+from itertools import chain
 from typing import Union
 
 from .. import dto, state, util
+from ..dispatcher import event
+from . import abstract
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +16,10 @@ class Node(util.dep_manager.AbstractNode):
     payload: dto.IssuerCreateDTO
 
     def __hash__(self) -> int:
-        return hash("{0[secret_engine]}/{0[name]}".format(self.payload["spec"]))
+        return hash(self.payload.absolute_path())
+
+    def __repr__(self) -> str:
+        return f"Node({self.payload.absolute_path()})"
 
     @classmethod
     def from_payload(cls, payload: dto.IssuerCreateDTO) -> "Node":
@@ -28,12 +34,15 @@ class Node(util.dep_manager.AbstractNode):
 
 
 @dataclass(slots=True)
-class NodeReference:
-    """A reference to a :class:`Node` object. This allows for efficient ordering of
-    dependencies even when the issuer's details are not yet available.
+class PlaceholderNode:
+    """Efficiently represents a :class:Node object before its details are available.
+
+    This class enables ordering dependencies without waiting for the full node
+    information.
 
     Args:
-        node_hash: The hash of the referenced node."""
+        node_hash: The hash of the placeholder node.
+    """
 
     node_hash: int
 
@@ -41,116 +50,180 @@ class NodeReference:
         return self.node_hash
 
     @classmethod
-    def from_issuer_ref(cls, issuer_ref: str) -> "NodeReference":
-        """
-        Creates a reference to a node.
+    def from_issuer_absolute_path(cls, path: str) -> "PlaceholderNode":
+        """Create a new :class:`PlaceholderNode` instance from an issuer absolute path.
 
         Args:
-            issuer_ref: The PKI engine mount path followed by the issuer name, separated
+            path: The PKI engine mount path followed by the issuer name, separated
                 by a forward slash. For example: ``pki/my-issuer``.
         """
-        return cls(hash(issuer_ref))
+        return cls(hash(path))
 
 
-NodeType = Union[Node, NodeReference]
+NodeType = Union[Node, PlaceholderNode]
 
 
 @dataclass(slots=True)
-class IssuerCreateProcessor:
+class IssuerCreateProcessor(abstract.AbstractProcessor):
     state: state.IssuerState
-    sem: asyncio.Semaphore
+
+    def register_handlers(self) -> None:
+        async def _on_issuer_discovered(ev: event.IssuerDiscovered) -> None:
+            """
+            Responds to the :class:`event.IssuerDiscovered` event by performing the
+            following tasks:
+
+            #. If the payload includes issuance parameters, it checks whether the root
+               issuer already exists on the Vault server. If it does, it schedules all
+               known intermediates, including the current one, to be created on the
+               Vault server, setting up a proper dependency chain. If the root issuer
+               does not exist, it creates the given intermediate issuer later when the
+               root CA is set up (the processor memorizes the payload).
+            #. If the payload does not include issuance parameters, the function creates
+               the issuer immediately without establishing dependencies.
+            """
+            if ev.payload.spec.get("issuance_params"):
+                async with self.state.dep_mgr.lock() as mgr:
+                    if (
+                        root := mgr.get_node_by_hash(
+                            (root_hash := hash(ev.payload.isser_ref_absolute_path())),
+                            None,
+                        )
+                    ) is None:
+                        root = PlaceholderNode(node_hash=root_hash)
+                        mgr.add_node(root)
+
+                    intermediate = Node.from_payload(ev.payload)
+                    if (
+                        existing_intermediate := mgr.get_node_by_hash(
+                            hash(ev.payload.absolute_path()),
+                            None,
+                        )
+                    ) is None:
+                        mgr.add_node(intermediate)
+                    elif isinstance(existing_intermediate, PlaceholderNode):
+                        mgr.relabel_nodes(((existing_intermediate, intermediate),))
+                        del existing_intermediate
+                    else:
+                        raise RuntimeError("Duplicates aren't allowed: %r" % ev.payload)
+
+                    mgr.add_edge(root, intermediate, "unsatisfied")
+
+                    if not mgr.are_edges_satisfied(root):
+                        # skip creating intermediates as the root is not yet
+                        # available
+                        return
+            else:
+                async with self.state.dep_mgr.lock() as mgr:
+                    if (
+                        root := mgr.get_node_by_hash(
+                            (root_hash := hash(ev.payload.absolute_path())),
+                            None,
+                        )
+                    ) is None:
+                        root = PlaceholderNode(node_hash=root_hash)
+                        mgr.add_node(root)
+
+                await self._process(ev.payload)
+
+            await self._fulfill_unsatisfied_intermediates(root)
+
+        async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
+            """
+            Responds to the :class:`event.PostProcessRequested` event by processing any
+            unsatisfied issuer nodes.
+
+            Args:
+                _: The event triggered by the dispatcher when post-processing is
+                    requested.
+            """
+            await self._force_issuer_creation_despite_root_absence()
+
+        self.state.observer.register((event.IssuerDiscovered,), _on_issuer_discovered)
+        self.state.observer.register(
+            (event.PostProcessRequested,), _on_postprocess_requested
+        )
 
     async def _process(self, payload: dto.IssuerCreateDTO) -> None:
         """Processes the given payload."""
         await self.state.iss_svc.create(payload)
+        # TODO: Unchanged/Updated events
+        await self.state.observer.trigger(event.IssuerCreated(payload))
 
-    async def _create_task(
-        self, tg: asyncio.TaskGroup, payload: dto.IssuerCreateDTO
-    ) -> None:
-        await util.coro.create_task_limited(tg, self.sem, self._process(payload))
-
-    async def _fulfill_unsatisfied_successors(self, predecessor: NodeType) -> None:
+    async def _fulfill_unsatisfied_intermediates(self, root: NodeType) -> None:
+        logger.debug("fulfilling intermediates for root: %r", hash(root))
         async with self.state.dep_mgr.lock() as mgr:
-            for sucr in (
-                unsatisfied_sucrs := tuple(mgr.find_unsatisfied_nodes(predecessor))
+            for intermediate in (
+                unsatisfied_intermediates := tuple(mgr.find_unsatisfied_nodes(root))
             ):
-                mgr.update_status(
-                    predecessor=predecessor, successor=sucr, status="in_process"
-                )
+                mgr.update_edge_status(root, intermediate, status="in_process")
 
         async with asyncio.TaskGroup() as tg:
-            for sucr in unsatisfied_sucrs:
-                logger.debug("creating task for successor %r", hash(sucr))
-                assert isinstance(sucr, Node)
-                await self._create_task(tg, sucr.payload)
+            for intermediate in unsatisfied_intermediates:
+                assert isinstance(intermediate, Node)
+                logger.debug("creating task for intermediate %r", hash(intermediate))
+                await util.coro.create_task_limited(
+                    tg, self.state.sem, self._process(intermediate.payload)
+                )
 
-        if not unsatisfied_sucrs:
-            logger.debug("no outbound edges were found for node %r", hash(predecessor))
+        if not unsatisfied_intermediates:
+            logger.debug("no outbound edges were found for node %r", hash(root))
             return
 
         async with self.state.dep_mgr.lock() as mgr:
-            for sucr in unsatisfied_sucrs:
-                mgr.update_status(
-                    predecessor=predecessor, successor=sucr, status="satisfied"
+            for intermediate in unsatisfied_intermediates:
+                mgr.update_edge_status(root, intermediate, status="satisfied")
+
+            # Optimize memory usage by replacing nodes with payloads with placeholder
+            # nodes. Since the issuer has been created, we no longer need to store the
+            # payload data in the node.
+            mgr.relabel_nodes(
+                chain(
+                    (
+                        (
+                            root,
+                            PlaceholderNode.from_issuer_absolute_path(
+                                root.payload.absolute_path()
+                            ),
+                        ),
+                    )
+                    if isinstance(root, Node)
+                    else (),
+                    (
+                        (
+                            intermediate,
+                            PlaceholderNode.from_issuer_absolute_path(
+                                intermediate.payload.absolute_path()
+                            ),
+                        )
+                        for intermediate in unsatisfied_intermediates
+                        if isinstance(intermediate, Node)
+                    ),
                 )
+            )
 
-        for sucr in unsatisfied_sucrs:
-            await self._fulfill_unsatisfied_successors(predecessor=sucr)
+        for intermediate in unsatisfied_intermediates:
+            await self._fulfill_unsatisfied_intermediates(intermediate)
 
-    async def process(self, payload: dto.IssuerCreateDTO) -> None:
+    async def _force_issuer_creation_despite_root_absence(self) -> None:
         """
-        Schedule creation of a new issuer on the Vault server.
-
-        If the payload includes issuance parameters, the function will:
-
-            - Check if the root issuer already exists on the Vault server.
-            - If the root issuer exists, schedule all known intermediates, including the
-              current one, to be created on the Vault server, setting up a proper
-              dependency chain.
-            - If the root issuer does not exist, create the given intermediate issuer
-              later when the root CA is set up.
-
-        If the payload does not include issuance parameters, the function will create
-        the issuer immediately without establishing dependencies.
-
-        Args:
-            payload: The payload containing the information about the new issuer.
-
-        See also:
-            :meth:`postprocess`
+        Forces the creation of intermediates for which the root has not yet been
+        configured, which may cause errors and require careful analysis to resolve.
         """
-        if not (iss_params := payload["spec"].get("issuance_params")):
-            await self._process(payload)
-
         async with self.state.dep_mgr.lock() as mgr:
-            predecessor: NodeType
-            if iss_params:
-                successor = Node.from_payload(payload)
-                predecessor = NodeReference.from_issuer_ref(iss_params["issuer_ref"])
-                mgr.add_node(successor)
-                mgr.add_edge(predecessor, successor, "unsatisfied")
+            for root, intmd in (edges := tuple(mgr.find_all_unsatisfied_edges())):
+                mgr.update_edge_status(root, intmd, status="in_process")
 
-                if not (
-                    mgr.is_node_exists(predecessor)
-                    and mgr.are_edges_satisfied(predecessor)
-                ):
-                    # skip creating successors as the predecessor is not yet available
-                    return
-            else:
-                predecessor = Node.from_payload(payload)
-                mgr.add_node(predecessor)
-
-        await self._fulfill_unsatisfied_successors(predecessor)
-
-    async def postprocess(self) -> None:
-        """
-        Forces creation of issuers with unsatisfied dependencies, aiding in resolving
-        recognition and cyclic dependency issues, but may cause errors and requires
-        careful analysis for resolution.
-        """
         async with asyncio.TaskGroup() as tg:
-            async with self.state.dep_mgr.lock() as mgr:
-                for node in mgr.find_all_unsatisfied_nodes():
-                    assert isinstance(node, Node)
-                    logger.debug("force node to be processed: %r", node)
-                    await self._create_task(tg, node.payload)
+            for root, intmd in edges:
+                if not isinstance(intmd, Node):
+                    logger.debug(
+                        "Unable to force the node to be processed as it has "
+                        "no payload."
+                    )
+                    continue
+
+                logger.debug("forcing processing of node: %r", hash(intmd))
+                await util.coro.create_task_limited(
+                    tg, util.coro.BoundlessSemaphore(), self._process(intmd.payload)
+                )

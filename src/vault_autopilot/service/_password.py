@@ -20,7 +20,7 @@ class PasswordService:
     client: asyva.Client
 
     async def create(self, payload: dto.PasswordCreateDTO) -> None:
-        spec = payload["spec"]
+        spec = payload.spec
 
         try:
             value = await self.client.generate_password(policy_path=spec["policy_path"])

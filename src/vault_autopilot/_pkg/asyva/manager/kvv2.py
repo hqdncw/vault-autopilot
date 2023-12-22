@@ -29,8 +29,9 @@ class KVV2Manager(base.BaseManager):
         if resp.status == http.HTTPStatus.OK:
             return
 
-        resp_body = await resp.json()
-        if constants.CAS_MISMATCH in resp_body["errors"]:
+        result = await resp.json()
+        logger.debug(result)
+        if constants.CAS_MISMATCH in result["errors"]:
             ctx = exc.CASParameterMismatchError.Context(
                 secret_path="/".join((mount_path, path))
             )
@@ -60,7 +61,6 @@ class KVV2Manager(base.BaseManager):
                 ctx=ctx,
             )
 
-        logger.debug(resp_body)
         raise await exc.VaultAPIError.from_response(
             "Failed to create/update secret", resp
         )
@@ -71,11 +71,10 @@ class KVV2Manager(base.BaseManager):
                 "/v1/%s/metadata/%s" % (payload["mount_path"], payload["path"])
             )
 
-        resp_body = await resp.json()
+        result = await resp.json()
         if resp.status == http.HTTPStatus.OK:
-            return cast(int, resp_body["data"]["current_version"])
+            return cast(int, result["data"]["current_version"])
 
-        logger.debug(resp_body)
         raise await exc.VaultAPIError.from_response(
             "Failed to retrieve secret current version", resp
         )

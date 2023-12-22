@@ -28,9 +28,7 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "click~=8.1.7",
   "pydantic~=2.4.2",
-  "ruamel.yaml~=0.18.5",
   "aiohttp~=3.8.5",
   "lazy-object-proxy~=1.9.0",
   "networkx~=3.2.1",
@@ -45,12 +43,19 @@ version = "0.1.0"
 Repository = "https://github.com/hqdncw/vault-autopilot"
 
 [project.optional-dependencies]
+cli = [
+  "click~=8.1.7",
+  "ruamel.yaml~=0.18.5"
+]
+# colorlog = [
+#   "colorlog~=6.8.0"
+# ]
 dev = [
   "black~=23.7.0",
   "isort~=5.12.0",
   "ruff~=0.0.285",
   "mypy~=1.5.1",
-  "pre-commit~=3.4.0",
+  "pre-commit~=3.4.0"
 ]
 
 [tool.black]
@@ -104,6 +109,7 @@ module = [
   "lazy_object_proxy.*",
   "networkx.*"
 ]
+ignore_missing_imports = true
 
 [tool.semantic_release]
 build_command = """

@@ -21,3 +21,6 @@ class PasswordSpec(TypedDict):
 class PasswordCreateDTO(abstract.AbstractDTO):
     kind: Literal["Password"]
     spec: PasswordSpec
+
+    def absolute_path(self) -> str:
+        return "/".join((self.spec["secret_engine"], self.spec["path"]))

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import pathlib
 from dataclasses import dataclass
-from typing import IO, Any, Iterator
+from typing import IO, Any, Iterator, Type, Union
 
 import pydantic
 import pydantic.alias_generators
@@ -14,16 +14,15 @@ from . import dto, exc, util
 __all__ = ("QueueType", "EndByte", "ManifestParser")
 
 
-QueueType = asyncio.Queue["dto.DTO | EndByte"]
+QueueType = asyncio.Queue[Union[dto.DTO, "EndByte"]]
 
-logger = logging.getLogger(__name__)
-
-KIND_SCHEMA_MAP: dict[str, pydantic.TypeAdapter[dto.DTO]] = {
-    "Password": pydantic.TypeAdapter(dto.PasswordCreateDTO),
-    "Issuer": pydantic.TypeAdapter(dto.IssuerCreateDTO),
-    "PasswordPolicy": pydantic.TypeAdapter(dto.PasswordPolicyCreateDTO),
+_logger = logging.getLogger(__name__)
+_KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
+    "Password": dto.PasswordCreateDTO,
+    "Issuer": dto.IssuerCreateDTO,
+    "PasswordPolicy": dto.PasswordPolicyCreateDTO,
 }
-loader = yaml.YAML(typ="rt")
+_loader = yaml.YAML(typ="rt")
 
 
 class EndByte:
@@ -45,10 +44,10 @@ class ManifestParser:
     manifest_iterator: Iterator[IO[bytes]]
 
     async def execute(self) -> "QueueType":
-        logger.debug("parsing files started")
+        _logger.debug("parsing files")
 
         def stream_documents(buf: IO[bytes]) -> Any:
-            return (obj for obj in loader.load_all(buf))
+            return (obj for obj in _loader.load_all(buf))
 
         for buf in self.manifest_iterator:
             iter_, fn = stream_documents(buf), buf.name
@@ -75,26 +74,26 @@ class ManifestParser:
                             ctx,
                         )
 
-                    if kind in KIND_SCHEMA_MAP.keys():
-                        schema = KIND_SCHEMA_MAP[kind]
+                    if kind in _KIND_SCHEMA_MAP.keys():
+                        schema = _KIND_SCHEMA_MAP[kind]
                     else:
                         raise exc.ManifestValidationError(
                             "Unsupported kind %r. Supported object kinds include: %s"
-                            % (kind, tuple(KIND_SCHEMA_MAP.keys())),
+                            % (kind, tuple(_KIND_SCHEMA_MAP.keys())),
                             ctx,
                         )
 
                     try:
-                        payload = schema.validate_python(payload)
+                        payload = schema.model_validate(payload)
                     except pydantic.ValidationError as ex:
                         raise exc.ManifestValidationError(
                             str(util.model.convert_errors(ex)), ctx
                         )
 
-                    logger.debug("put %r", payload)
+                    _logger.debug("put %r", payload)
                     await self.queue.put(payload)
 
-        logger.debug("parsing files finished")
+        _logger.debug("parsed files successfully")
         await self.queue.put(EndByte())
 
         return self.queue

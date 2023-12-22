@@ -30,3 +30,10 @@ class IssuerSpec(TypedDict):
 class IssuerCreateDTO(abstract.AbstractDTO):
     kind: Literal["Issuer"]
     spec: IssuerSpec
+
+    def absolute_path(self) -> str:
+        return "/".join((self.spec["secret_engine"], self.spec["name"]))
+
+    def isser_ref_absolute_path(self) -> str:
+        assert "issuance_params" in self.spec, "Issuance params must not be null"
+        return self.spec["issuance_params"]["issuer_ref"]

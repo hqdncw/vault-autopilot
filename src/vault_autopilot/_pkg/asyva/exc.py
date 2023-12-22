@@ -176,7 +176,7 @@ class CASParameterMismatchError(VaultAPIError):
         return self.message.format(
             secret_path=self.ctx["secret_path"],
             provided_cas=self.ctx.get("provided_cas", "not set"),
-            required_cas=self.ctx.get("provided_cas", "unknown"),
+            required_cas=self.ctx.get("required_cas", "unknown"),
         )
 
 

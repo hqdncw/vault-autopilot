@@ -13,9 +13,9 @@ class IssuerService:
 
     async def _create_intmd_issuer(self, payload: dto.IssuerCreateDTO) -> None:
         mount_path, csr_params, iss_params = (
-            payload["spec"]["secret_engine"],
-            payload["spec"]["csr_params"],
-            payload["spec"].get("issuance_params"),
+            payload.spec["secret_engine"],
+            payload.spec["csr_params"],
+            payload.spec.get("issuance_params"),
         )
 
         assert iss_params is not None, "Issuance params must not be null"
@@ -46,12 +46,12 @@ class IssuerService:
         # Set issuer name
         await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
-            issuer_name=payload["spec"]["name"],
-            mount_path=payload["spec"]["secret_engine"],
+            issuer_name=payload.spec["name"],
+            mount_path=payload.spec["secret_engine"],
         )
 
     async def _create_root_issuer(self, payload: dto.IssuerCreateDTO) -> None:
-        spec = payload["spec"]
+        spec = payload.spec
 
         await self.client.generate_root(
             issuer_name=spec["name"],
@@ -63,15 +63,9 @@ class IssuerService:
         )
 
     async def create(self, payload: dto.IssuerCreateDTO) -> None:
-        spec = payload["spec"]
-
-        if spec.get("issuance_params"):
+        if payload.spec.get("issuance_params"):
             await self._create_intmd_issuer(payload)
         else:
             await self._create_root_issuer(payload)
 
-        logger.debug(
-            "created issuer at path: %r (secret_engine: %r)",
-            spec["name"],
-            spec["secret_engine"],
-        )
+        logger.debug("created issuer at path: %r", payload.absolute_path())
