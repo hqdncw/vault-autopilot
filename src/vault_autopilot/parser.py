@@ -18,9 +18,9 @@ QueueType = asyncio.Queue[Union[dto.DTO, "EndByte"]]
 
 _logger = logging.getLogger(__name__)
 _KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
-    "Password": dto.PasswordCreateDTO,
-    "Issuer": dto.IssuerCreateDTO,
-    "PasswordPolicy": dto.PasswordPolicyCreateDTO,
+    "Password": dto.PasswordInitializeDTO,
+    "Issuer": dto.IssuerInitializeDTO,
+    "PasswordPolicy": dto.PasswordPolicyInitializeDTO,
 }
 _loader = yaml.YAML(typ="rt")
 

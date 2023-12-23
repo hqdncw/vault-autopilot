@@ -8,7 +8,7 @@ from .._pkg import asyva
 class PasswordPolicyService:
     client: asyva.Client
 
-    async def create_or_update(self, payload: dto.PasswordPolicyCreateDTO) -> None:
+    async def create_or_update(self, payload: dto.PasswordPolicyInitializeDTO) -> None:
         await self.client.create_or_update_password_policy(
             path=payload.spec["path"], policy=payload.spec["policy"]
         )

@@ -1,14 +1,14 @@
 from typing import Union
 
-from .issuer import IssuerCreateDTO
-from .password import PasswordCreateDTO
-from .password_policy import PasswordPolicyCreateDTO
+from .issuer import IssuerInitializeDTO
+from .password import PasswordInitializeDTO
+from .password_policy import PasswordPolicyInitializeDTO
 
-DTO = Union[IssuerCreateDTO, PasswordCreateDTO, PasswordPolicyCreateDTO]
+DTO = Union[IssuerInitializeDTO, PasswordInitializeDTO, PasswordPolicyInitializeDTO]
 
 __all__ = (
     "DTO",
-    "IssuerCreateDTO",
-    "PasswordCreateDTO",
-    "PasswordPolicyCreateDTO",
+    "IssuerInitializeDTO",
+    "PasswordInitializeDTO",
+    "PasswordPolicyInitializeDTO",
 )

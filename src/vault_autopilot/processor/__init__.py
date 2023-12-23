@@ -1,9 +1,9 @@
-from .issuer_create import IssuerCreateProcessor
-from .password_create import PasswordCreateProcessor
-from .password_policy_create import PasswordPolicyCreateProcessor
+from .issuer import IssuerInitializeProcessor
+from .password import PasswordInitializeProcessor
+from .password_policy import PasswordPolicyInitializeProcessor
 
 __all__ = (
-    "IssuerCreateProcessor",
-    "PasswordCreateProcessor",
-    "PasswordPolicyCreateProcessor",
+    "IssuerInitializeProcessor",
+    "PasswordInitializeProcessor",
+    "PasswordPolicyInitializeProcessor",
 )

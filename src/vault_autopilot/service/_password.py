@@ -19,7 +19,7 @@ def encode(value: str, encoding: StringEncodingType) -> str:
 class PasswordService:
     client: asyva.Client
 
-    async def create(self, payload: dto.PasswordCreateDTO) -> None:
+    async def create(self, payload: dto.PasswordInitializeDTO) -> None:
         spec = payload.spec
 
         try:

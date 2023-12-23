@@ -27,7 +27,7 @@ class IssuerSpec(TypedDict):
     chaining: NotRequired[Chaining]
 
 
-class IssuerCreateDTO(abstract.AbstractDTO):
+class IssuerInitializeDTO(abstract.AbstractDTO):
     kind: Literal["Issuer"]
     spec: IssuerSpec
 

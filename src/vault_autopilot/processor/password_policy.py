@@ -6,7 +6,7 @@ from . import abstract
 
 
 @dataclass(slots=True)
-class PasswordPolicyCreateProcessor(abstract.AbstractProcessor):
+class PasswordPolicyInitializeProcessor(abstract.AbstractProcessor):
     state: state.PasswordPolicyState
 
     def register_handlers(self) -> None:
@@ -24,6 +24,6 @@ class PasswordPolicyCreateProcessor(abstract.AbstractProcessor):
             (event.PasswordPolicyDiscovered,), _on_password_policy_discovered
         )
 
-    async def _process(self, payload: dto.PasswordPolicyCreateDTO) -> None:
+    async def _process(self, payload: dto.PasswordPolicyInitializeDTO) -> None:
         await self.state.pwd_policy_svc.create_or_update(payload)
         await self.state.observer.trigger(event.PasswordPolicyCreated(payload))

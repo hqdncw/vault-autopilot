@@ -33,62 +33,62 @@ class EventObserver(Generic[T]):
 
 @dataclass(slots=True)
 class PasswordDiscovered:
-    payload: dto.PasswordCreateDTO
+    payload: dto.PasswordInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordCreated:
-    payload: dto.PasswordCreateDTO
+    payload: dto.PasswordInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordUpdated:
-    payload: dto.PasswordCreateDTO
+    payload: dto.PasswordInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordUnchanged:
-    payload: dto.PasswordCreateDTO
+    payload: dto.PasswordInitializeDTO
 
 
 @dataclass(slots=True)
 class IssuerDiscovered:
-    payload: dto.IssuerCreateDTO
+    payload: dto.IssuerInitializeDTO
 
 
 @dataclass(slots=True)
 class IssuerCreated:
-    payload: dto.IssuerCreateDTO
+    payload: dto.IssuerInitializeDTO
 
 
 @dataclass(slots=True)
 class IssuerUpdated:
-    payload: dto.IssuerCreateDTO
+    payload: dto.IssuerInitializeDTO
 
 
 @dataclass(slots=True)
 class IssuerUnchanged:
-    payload: dto.IssuerCreateDTO
+    payload: dto.IssuerInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyDiscovered:
-    payload: dto.PasswordPolicyCreateDTO
+    payload: dto.PasswordPolicyInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyCreated:
-    payload: dto.PasswordPolicyCreateDTO
+    payload: dto.PasswordPolicyInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyUpdated:
-    payload: dto.PasswordPolicyCreateDTO
+    payload: dto.PasswordPolicyInitializeDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyUnchanged:
-    payload: dto.PasswordPolicyCreateDTO
+    payload: dto.PasswordPolicyInitializeDTO
 
 
 @dataclass(slots=True)
@@ -96,22 +96,22 @@ class PostProcessRequested:
     """
     After all manifests have been processed, this event is triggered by the dispatcher,
     providing an opportunity to examine resources with unsatisfied dependencies. This
-    can include situations such as passwords awaiting configuration of password policies
-    or intermediate issuers waiting for configuration of upstream issuers.
+    can include situations such as passwords awaiting initialization of password
+    policies or intermediate issuers waiting for initialization of upstream issuers.
 
     See also:
-        * :class:`PasswordConfigured`
-        * :class:`IssuerConfigured`
-        * :class:`PasswordPolicyConfigured`
+        * :class:`PasswordInitialized`
+        * :class:`IssuerInitialized`
+        * :class:`PasswordPolicyInitialized`
     """
 
 
 ResourceDiscovered = Union[
     PasswordDiscovered, IssuerDiscovered, PasswordPolicyDiscovered
 ]
-PasswordConfigured = Union[PasswordCreated, PasswordUpdated, PasswordUnchanged]
-IssuerConfigured = Union[IssuerCreated, IssuerUpdated, IssuerUnchanged]
-PasswordPolicyConfigured = Union[
+PasswordInitialized = Union[PasswordCreated, PasswordUpdated, PasswordUnchanged]
+IssuerInitialized = Union[IssuerCreated, IssuerUpdated, IssuerUnchanged]
+PasswordPolicyInitialized = Union[
     PasswordPolicyCreated, PasswordPolicyUpdated, PasswordPolicyUnchanged
 ]
 

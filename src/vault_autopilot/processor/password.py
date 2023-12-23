@@ -10,13 +10,13 @@ from . import abstract
 
 @dataclass(slots=True)
 class PasswordNode(util.dep_manager.AbstractNode):
-    payload: dto.PasswordCreateDTO
+    payload: dto.PasswordInitializeDTO
 
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
 
     @classmethod
-    def from_payload(cls, payload: dto.PasswordCreateDTO) -> "PasswordNode":
+    def from_payload(cls, payload: dto.PasswordInitializeDTO) -> "PasswordNode":
         return cls(payload)
 
 
@@ -36,7 +36,7 @@ NodeType = Union[PasswordNode, PasswordPolicyNode]
 
 
 @dataclass(slots=True)
-class PasswordCreateProcessor(abstract.AbstractProcessor):
+class PasswordInitializeProcessor(abstract.AbstractProcessor):
     state: state.PasswordState
 
     def register_handlers(self) -> None:
@@ -49,15 +49,15 @@ class PasswordCreateProcessor(abstract.AbstractProcessor):
             actions:
 
             #. Checks if the policy specified in the password payload is already
-               configured. If so, proceeds with processing the payload immediately.
-            #. If the password policy is not yet configured (i.e., it has not been
+               initialized. If so, proceeds with processing the payload immediately.
+            #. If the password policy is not yet initialized (i.e., it has not been
                parsed from the manifest yet), adds the password to the dependency
                manager and sets its status to "unsatisfied". This indicates that the
-               password is waiting for the policy to be configured before it can be
+               password is waiting for the policy to be initialized before it can be
                processed.
 
             See also:
-                :meth:`_on_password_policy_configured`
+                :meth:`_on_password_policy_initialized`
             """
             # policy, pwd = PasswordPolicyNode.from_path(
             #     ev.payload.spec["policy_path"]
@@ -89,16 +89,16 @@ class PasswordCreateProcessor(abstract.AbstractProcessor):
             async with self.state.dep_mgr.lock() as mgr:
                 mgr.update_edge_status(policy, pwd, "satisfied")
 
-        async def _on_password_policy_configured(
-            ev: event.PasswordPolicyConfigured,
+        async def _on_password_policy_initialized(
+            ev: event.PasswordPolicyInitialized,
         ) -> None:
             """
-            Responds to the :class:`event.PasswordPolicyConfigured` event by processing
-            any unsatisfied password nodes that depend on the configured policy.
+            Responds to the :class:`event.PasswordPolicyInitialized` event by processing
+            any uninitialized password nodes that depend on the initialized policy.
 
             Args:
                 ev: The event triggered by the system when a password policy is
-                    configured.
+                    initialized.
             """
             async with self.state.dep_mgr.lock() as mgr:
                 if (
@@ -122,14 +122,14 @@ class PasswordCreateProcessor(abstract.AbstractProcessor):
 
         async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
             """
-            Respond to post-processing requests by processing any unsatisfied password
-            nodes.
+            Respond to post-processing requests by processing any uninitialized
+            passwords.
 
             Args:
                 _: The event triggered by the dispatcher when post-processing is
                     requested.
             """
-            await self._force_password_creation_despite_policy_absence()
+            await self._force_password_init_despite_policy_absence()
 
         self.state.observer.register(
             (event.PasswordDiscovered,),
@@ -141,13 +141,13 @@ class PasswordCreateProcessor(abstract.AbstractProcessor):
                 event.PasswordPolicyUpdated,
                 event.PasswordPolicyUnchanged,
             ),
-            _on_password_policy_configured,
+            _on_password_policy_initialized,
         )
         self.state.observer.register(
             (event.PostProcessRequested,), _on_postprocess_requested
         )
 
-    async def _process(self, payload: dto.PasswordCreateDTO) -> None:
+    async def _process(self, payload: dto.PasswordInitializeDTO) -> None:
         # TODO: Unchanged/Updated events
         await self.state.pwd_svc.create(payload)
         await self.state.observer.trigger(event.PasswordCreated(payload))
@@ -169,10 +169,9 @@ class PasswordCreateProcessor(abstract.AbstractProcessor):
             # password has already been generated.
             mgr.remove_nodes(pwd_nodes)
 
-    async def _force_password_creation_despite_policy_absence(self) -> None:
+    async def _force_password_init_despite_policy_absence(self) -> None:
         """
-        Forces the creation of passwords for which the policy has not yet been
-        configured, which may cause errors and require careful analysis to resolve.
+        Initializes passwords for which the policy has not yet been initialized.
         """
         async with self.state.dep_mgr.lock() as mgr:
             edges = cast(

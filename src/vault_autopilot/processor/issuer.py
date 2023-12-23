@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class Node(util.dep_manager.AbstractNode):
-    payload: dto.IssuerCreateDTO
+    payload: dto.IssuerInitializeDTO
 
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
@@ -22,7 +22,7 @@ class Node(util.dep_manager.AbstractNode):
         return f"Node({self.payload.absolute_path()})"
 
     @classmethod
-    def from_payload(cls, payload: dto.IssuerCreateDTO) -> "Node":
+    def from_payload(cls, payload: dto.IssuerInitializeDTO) -> "Node":
         """
         Creates a node from given payload.
 
@@ -64,7 +64,7 @@ NodeType = Union[Node, PlaceholderNode]
 
 
 @dataclass(slots=True)
-class IssuerCreateProcessor(abstract.AbstractProcessor):
+class IssuerInitializeProcessor(abstract.AbstractProcessor):
     state: state.IssuerState
 
     def register_handlers(self) -> None:
@@ -74,13 +74,16 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
             following tasks:
 
             #. If the payload includes the chaining field, it checks whether the
-               upstream issuer configured on the Vault server. If it does, it schedules
-               all known intermediates, including the current one, to be created on the
-               Vault server, setting up a proper dependency chain. If the upstream
-               issuer does not exist, it creates the given intermediate issuer later
+               upstream issuer initialized on the Vault server. If it does, it schedules
+               all known intermediates, including the current one, to be initialized on
+               the Vault server, setting up a proper dependency chain. If the upstream
+               issuer does not exist, it initialises the given intermediate issuer later
                when the upstream issuer is set up (the processor memorizes the payload).
-            #. If the payload does not include the chaining field, the function creates
-               the issuer immediately without establishing dependencies.
+            #. If the payload does not include the chaining field, the function
+               initialises the issuer immediately without establishing dependencies.
+
+            See also:
+                :meth:`_force_issuer_init_despite_upstream_absence`
             """
             if ev.payload.spec.get("chaining"):
                 async with self.state.dep_mgr.lock() as mgr:
@@ -141,14 +144,14 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
                 _: The event triggered by the dispatcher when post-processing is
                     requested.
             """
-            await self._force_issuer_creation_despite_upstream_absence()
+            await self._force_issuer_init_despite_upstream_absence()
 
         self.state.observer.register((event.IssuerDiscovered,), _on_issuer_discovered)
         self.state.observer.register(
             (event.PostProcessRequested,), _on_postprocess_requested
         )
 
-    async def _process(self, payload: dto.IssuerCreateDTO) -> None:
+    async def _process(self, payload: dto.IssuerInitializeDTO) -> None:
         """Processes the given payload."""
         await self.state.iss_svc.create(payload)
         # TODO: Unchanged/Updated events
@@ -209,10 +212,9 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
         for intermediate in unsatisfied_intermediates:
             await self._fulfill_unsatisfied_intermediates(intermediate)
 
-    async def _force_issuer_creation_despite_upstream_absence(self) -> None:
+    async def _force_issuer_init_despite_upstream_absence(self) -> None:
         """
-        Forces the creation of intermediates for which the upstream has not yet been
-        configured, which may cause errors and require careful analysis to resolve.
+        Initializes issuers for which the upstream has not yet been initialized.
         """
         async with self.state.dep_mgr.lock() as mgr:
             for upstream, intmd in (edges := tuple(mgr.find_all_unsatisfied_edges())):

@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class IssuerService:
     client: asyva.Client
 
-    async def _create_intmd_issuer(self, payload: dto.IssuerCreateDTO) -> None:
+    async def _create_intmd_issuer(self, payload: dto.IssuerInitializeDTO) -> None:
         mount_path, certificate, chaining = (
             payload.spec["secret_engine"],
             payload.spec["certificate"],
@@ -50,7 +50,7 @@ class IssuerService:
             mount_path=payload.spec["secret_engine"],
         )
 
-    async def _create_root_issuer(self, payload: dto.IssuerCreateDTO) -> None:
+    async def _create_root_issuer(self, payload: dto.IssuerInitializeDTO) -> None:
         spec = payload.spec
 
         await self.client.generate_root(
@@ -62,7 +62,7 @@ class IssuerService:
             ),
         )
 
-    async def create(self, payload: dto.IssuerCreateDTO) -> None:
+    async def create(self, payload: dto.IssuerInitializeDTO) -> None:
         if payload.spec.get("chaining"):
             await self._create_intmd_issuer(payload)
         else:

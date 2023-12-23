@@ -46,13 +46,13 @@ class Dispatcher:
 
         # Initialize processors
         self._payload_proc_map = {
-            "Password": processor.PasswordCreateProcessor(
+            "Password": processor.PasswordInitializeProcessor(
                 state.PasswordState(client, self._sem, self._observer)
             ),
-            "Issuer": processor.IssuerCreateProcessor(
+            "Issuer": processor.IssuerInitializeProcessor(
                 state.IssuerState(client, self._sem, self._observer)
             ),
-            "PasswordPolicy": processor.PasswordPolicyCreateProcessor(
+            "PasswordPolicy": processor.PasswordPolicyInitializeProcessor(
                 state.PasswordPolicyState(client, self._sem, self._observer)
             ),
         }
