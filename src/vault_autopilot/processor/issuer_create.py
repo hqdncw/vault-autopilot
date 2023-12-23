@@ -73,25 +73,29 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
             Responds to the :class:`event.IssuerDiscovered` event by performing the
             following tasks:
 
-            #. If the payload includes issuance parameters, it checks whether the root
-               issuer already exists on the Vault server. If it does, it schedules all
-               known intermediates, including the current one, to be created on the
-               Vault server, setting up a proper dependency chain. If the root issuer
-               does not exist, it creates the given intermediate issuer later when the
-               root CA is set up (the processor memorizes the payload).
-            #. If the payload does not include issuance parameters, the function creates
+            #. If the payload includes the chaining field, it checks whether the
+               upstream issuer configured on the Vault server. If it does, it schedules
+               all known intermediates, including the current one, to be created on the
+               Vault server, setting up a proper dependency chain. If the upstream
+               issuer does not exist, it creates the given intermediate issuer later
+               when the upstream issuer is set up (the processor memorizes the payload).
+            #. If the payload does not include the chaining field, the function creates
                the issuer immediately without establishing dependencies.
             """
-            if ev.payload.spec.get("issuance_params"):
+            if ev.payload.spec.get("chaining"):
                 async with self.state.dep_mgr.lock() as mgr:
                     if (
-                        root := mgr.get_node_by_hash(
-                            (root_hash := hash(ev.payload.isser_ref_absolute_path())),
+                        upstream := mgr.get_node_by_hash(
+                            (
+                                upstream_hash := hash(
+                                    ev.payload.upstream_issuer_absolute_path()
+                                )
+                            ),
                             None,
                         )
                     ) is None:
-                        root = PlaceholderNode(node_hash=root_hash)
-                        mgr.add_node(root)
+                        upstream = PlaceholderNode(node_hash=upstream_hash)
+                        mgr.add_node(upstream)
 
                     intermediate = Node.from_payload(ev.payload)
                     if (
@@ -107,26 +111,26 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
                     else:
                         raise RuntimeError("Duplicates aren't allowed: %r" % ev.payload)
 
-                    mgr.add_edge(root, intermediate, "unsatisfied")
+                    mgr.add_edge(upstream, intermediate, "unsatisfied")
 
-                    if not mgr.are_edges_satisfied(root):
-                        # skip creating intermediates as the root is not yet
+                    if not mgr.are_edges_satisfied(upstream):
+                        # skip creating intermediates as the upstream is not yet
                         # available
                         return
             else:
                 async with self.state.dep_mgr.lock() as mgr:
                     if (
-                        root := mgr.get_node_by_hash(
-                            (root_hash := hash(ev.payload.absolute_path())),
+                        upstream := mgr.get_node_by_hash(
+                            (upstream_hash := hash(ev.payload.absolute_path())),
                             None,
                         )
                     ) is None:
-                        root = PlaceholderNode(node_hash=root_hash)
-                        mgr.add_node(root)
+                        upstream = PlaceholderNode(node_hash=upstream_hash)
+                        mgr.add_node(upstream)
 
                 await self._process(ev.payload)
 
-            await self._fulfill_unsatisfied_intermediates(root)
+            await self._fulfill_unsatisfied_intermediates(upstream)
 
         async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
             """
@@ -137,7 +141,7 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
                 _: The event triggered by the dispatcher when post-processing is
                     requested.
             """
-            await self._force_issuer_creation_despite_root_absence()
+            await self._force_issuer_creation_despite_upstream_absence()
 
         self.state.observer.register((event.IssuerDiscovered,), _on_issuer_discovered)
         self.state.observer.register(
@@ -150,13 +154,13 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
         # TODO: Unchanged/Updated events
         await self.state.observer.trigger(event.IssuerCreated(payload))
 
-    async def _fulfill_unsatisfied_intermediates(self, root: NodeType) -> None:
-        logger.debug("fulfilling intermediates for root: %r", hash(root))
+    async def _fulfill_unsatisfied_intermediates(self, upstream: NodeType) -> None:
+        logger.debug("fulfilling intermediates for upstream: %r", hash(upstream))
         async with self.state.dep_mgr.lock() as mgr:
             for intermediate in (
-                unsatisfied_intermediates := tuple(mgr.find_unsatisfied_nodes(root))
+                unsatisfied_intermediates := tuple(mgr.find_unsatisfied_nodes(upstream))
             ):
-                mgr.update_edge_status(root, intermediate, status="in_process")
+                mgr.update_edge_status(upstream, intermediate, status="in_process")
 
         async with asyncio.TaskGroup() as tg:
             for intermediate in unsatisfied_intermediates:
@@ -167,12 +171,12 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
                 )
 
         if not unsatisfied_intermediates:
-            logger.debug("no outbound edges were found for node %r", hash(root))
+            logger.debug("no outbound edges were found for node %r", hash(upstream))
             return
 
         async with self.state.dep_mgr.lock() as mgr:
             for intermediate in unsatisfied_intermediates:
-                mgr.update_edge_status(root, intermediate, status="satisfied")
+                mgr.update_edge_status(upstream, intermediate, status="satisfied")
 
             # Optimize memory usage by replacing nodes with payloads with placeholder
             # nodes. Since the issuer has been created, we no longer need to store the
@@ -181,13 +185,13 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
                 chain(
                     (
                         (
-                            root,
+                            upstream,
                             PlaceholderNode.from_issuer_absolute_path(
-                                root.payload.absolute_path()
+                                upstream.payload.absolute_path()
                             ),
                         ),
                     )
-                    if isinstance(root, Node)
+                    if isinstance(upstream, Node)
                     else (),
                     (
                         (
@@ -205,17 +209,17 @@ class IssuerCreateProcessor(abstract.AbstractProcessor):
         for intermediate in unsatisfied_intermediates:
             await self._fulfill_unsatisfied_intermediates(intermediate)
 
-    async def _force_issuer_creation_despite_root_absence(self) -> None:
+    async def _force_issuer_creation_despite_upstream_absence(self) -> None:
         """
-        Forces the creation of intermediates for which the root has not yet been
+        Forces the creation of intermediates for which the upstream has not yet been
         configured, which may cause errors and require careful analysis to resolve.
         """
         async with self.state.dep_mgr.lock() as mgr:
-            for root, intmd in (edges := tuple(mgr.find_all_unsatisfied_edges())):
-                mgr.update_edge_status(root, intmd, status="in_process")
+            for upstream, intmd in (edges := tuple(mgr.find_all_unsatisfied_edges())):
+                mgr.update_edge_status(upstream, intmd, status="in_process")
 
         async with asyncio.TaskGroup() as tg:
-            for root, intmd in edges:
+            for _, intmd in edges:
                 if not isinstance(intmd, Node):
                     logger.debug(
                         "Unable to force the node to be processed as it has "

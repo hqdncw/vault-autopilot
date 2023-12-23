@@ -14,7 +14,7 @@ class PasswordSpec(TypedDict):
     path: str
     secret_key: str
     policy_path: str
-    cas: Annotated[int, annotated_types.Ge(0)]
+    version: Annotated[int, annotated_types.Ge(1)]
     encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
 
 

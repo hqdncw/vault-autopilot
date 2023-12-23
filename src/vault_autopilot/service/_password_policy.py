@@ -10,5 +10,5 @@ class PasswordPolicyService:
 
     async def create_or_update(self, payload: dto.PasswordPolicyCreateDTO) -> None:
         await self.client.create_or_update_password_policy(
-            path=payload.spec["path"], policy=payload.spec["policy_params"]
+            path=payload.spec["path"], policy=payload.spec["policy"]
         )

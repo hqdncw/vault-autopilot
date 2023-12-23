@@ -97,7 +97,7 @@ class PostProcessRequested:
     After all manifests have been processed, this event is triggered by the dispatcher,
     providing an opportunity to examine resources with unsatisfied dependencies. This
     can include situations such as passwords awaiting configuration of password policies
-    or intermediate issuers waiting for configuration of root issuers.
+    or intermediate issuers waiting for configuration of upstream issuers.
 
     See also:
         * :class:`PasswordConfigured`

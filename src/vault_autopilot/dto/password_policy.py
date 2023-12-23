@@ -8,7 +8,7 @@ from . import abstract
 
 class PasswordPolicySpec(TypedDict):
     path: str
-    policy_params: password_policy.PasswordPolicy
+    policy: password_policy.PasswordPolicy
 
 
 class PasswordPolicyCreateDTO(abstract.AbstractDTO):
