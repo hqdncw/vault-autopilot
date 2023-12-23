@@ -188,8 +188,7 @@ class IssuerNameTakenError(VaultAPIError):
     Attributes:
         message: A human-readable message describing the error.
         issuer_name: The name of the conflicting issuer.
-        secret_engine: The path of the mounted PKI engine where the creation attempt was
-            made.
+        secret_engine: The path of the PKI engine that contains the conflicting issuer.
     """
 
     class Context(TypedDict):
