@@ -37,11 +37,11 @@ class _EdgeData(TypedDict):
 
 
 @dataclass(slots=True)
-class DependencyManager(Generic[T]):
+class DependencyChain(Generic[T]):
     """
     A class for managing dependencies between objects.
 
-    The :class:`DependencyManager` is a data structure that allows you to add and remove
+    The :class:`DependencyChain` is a data structure that allows you to add and remove
     edges between objects, representing dependencies between them. It can be used to
     compute the dependency order of a set of objects, which is useful in situations
     where certain objects must be processed before others.
@@ -82,7 +82,7 @@ class DependencyManager(Generic[T]):
     def relabel_nodes(self, pairs: Iterable[tuple[T, T]]) -> None:
         """
         Examples:
-            >>> mgr = DependencyManager()
+            >>> mgr = DependencyChain()
             >>> mgr.add_node("A")
             >>> mgr.add_node("B")
             >>> mgr.add_node("C")

@@ -18,7 +18,7 @@ class PasswordSpec(TypedDict):
     encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
 
 
-class PasswordInitializeDTO(abstract.AbstractDTO):
+class PasswordCheckOrSetDTO(abstract.AbstractDTO):
     kind: Literal["Password"]
     spec: PasswordSpec
 

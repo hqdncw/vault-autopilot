@@ -1,4 +1,4 @@
-from typing import Annotated, Literal, NotRequired, Sequence
+from typing import Annotated, Literal, NotRequired
 
 import pydantic
 from typing_extensions import TypedDict
@@ -7,7 +7,7 @@ IssuerType = Literal["root", "intermediate"]
 IssuerCertType = Literal["internal", "exported", "existing", "kms"]
 KeyType = Literal["rsa", "ed25519", "ec"]
 LeafNotAfterBehaviorType = Literal["err", "truncate", "permit"]
-UsageType = Sequence[
+UsageType = set[
     Literal["read-only", "issuing-certificates", "crl-signing", "ocsp-signing"]
 ]
 SignatureAlgorithmType = Literal[

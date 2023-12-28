@@ -33,87 +33,109 @@ class EventObserver(Generic[T]):
 
 @dataclass(slots=True)
 class PasswordDiscovered:
-    payload: dto.PasswordInitializeDTO
+    payload: dto.PasswordCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordCreated:
-    payload: dto.PasswordInitializeDTO
+    payload: dto.PasswordCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordUpdated:
-    payload: dto.PasswordInitializeDTO
+    payload: dto.PasswordCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordUnchanged:
-    payload: dto.PasswordInitializeDTO
+    payload: dto.PasswordCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class IssuerDiscovered:
-    payload: dto.IssuerInitializeDTO
+    payload: dto.IssuerCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class IssuerCreated:
-    payload: dto.IssuerInitializeDTO
+    payload: dto.IssuerCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class IssuerUpdated:
-    payload: dto.IssuerInitializeDTO
+    payload: dto.IssuerCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class IssuerUnchanged:
-    payload: dto.IssuerInitializeDTO
+    payload: dto.IssuerCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyDiscovered:
-    payload: dto.PasswordPolicyInitializeDTO
+    payload: dto.PasswordPolicyCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyCreated:
-    payload: dto.PasswordPolicyInitializeDTO
+    payload: dto.PasswordPolicyCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyUpdated:
-    payload: dto.PasswordPolicyInitializeDTO
+    payload: dto.PasswordPolicyCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PasswordPolicyUnchanged:
-    payload: dto.PasswordPolicyInitializeDTO
+    payload: dto.PasswordPolicyCheckOrSetDTO
+
+
+@dataclass(slots=True)
+class PKIRoleDiscovered:
+    payload: dto.PKIRoleCheckOrSetDTO
+
+
+@dataclass(slots=True)
+class PKIRoleCreated:
+    payload: dto.PKIRoleCheckOrSetDTO
+
+
+@dataclass(slots=True)
+class PKIRoleUpdated:
+    payload: dto.PKIRoleCheckOrSetDTO
+
+
+@dataclass(slots=True)
+class PKIRoleUnchanged:
+    payload: dto.PKIRoleCheckOrSetDTO
 
 
 @dataclass(slots=True)
 class PostProcessRequested:
     """
-    After all manifests have been processed, this event is triggered by the dispatcher,
-    providing an opportunity to examine resources with unsatisfied dependencies. This
-    can include situations such as passwords awaiting initialization of password
-    policies or intermediate issuers waiting for initialization of upstream issuers.
+    Once all manifests have been processed, this event is triggered by the dispatcher,
+    allowing you to inspect resources that still have unfulfilled dependencies. This
+    might include situations where passwords are waiting for password policy processing
+    or intermediate issuers are waiting for upstream issuers to complete their
+    processing.
 
     See also:
-        * :class:`PasswordInitialized`
-        * :class:`IssuerInitialized`
-        * :class:`PasswordPolicyInitialized`
+        * :class:`PasswordProcessed`
+        * :class:`IssuerProcessed`
+        * :class:`PasswordPolicyProcessed`
     """
 
 
 ResourceDiscovered = Union[
-    PasswordDiscovered, IssuerDiscovered, PasswordPolicyDiscovered
+    PasswordDiscovered, IssuerDiscovered, PasswordPolicyDiscovered, PKIRoleDiscovered
 ]
-PasswordInitialized = Union[PasswordCreated, PasswordUpdated, PasswordUnchanged]
-IssuerInitialized = Union[IssuerCreated, IssuerUpdated, IssuerUnchanged]
-PasswordPolicyInitialized = Union[
+PasswordProcessed = Union[PasswordCreated, PasswordUpdated, PasswordUnchanged]
+IssuerProcessed = Union[IssuerCreated, IssuerUpdated, IssuerUnchanged]
+PasswordPolicyProcessed = Union[
     PasswordPolicyCreated, PasswordPolicyUpdated, PasswordPolicyUnchanged
 ]
+PKIRoleProcessed = Union[PKIRoleCreated, PKIRoleUpdated, PKIRoleUnchanged]
 
 
 EventType = Union[
@@ -129,5 +151,9 @@ EventType = Union[
     PasswordPolicyCreated,
     PasswordPolicyUpdated,
     PasswordPolicyUnchanged,
+    PKIRoleDiscovered,
+    PKIRoleCreated,
+    PKIRoleUpdated,
+    PKIRoleUnchanged,
     PostProcessRequested,
 ]

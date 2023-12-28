@@ -1,3 +1,3 @@
-from . import coro, dep_manager, encoding, model
+from . import coro, dependency_chain, encoding, model
 
-__all__ = ("encoding", "coro", "model", "dep_manager")
+__all__ = ("encoding", "coro", "model", "dependency_chain")

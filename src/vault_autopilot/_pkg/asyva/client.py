@@ -234,3 +234,10 @@ class Client:
         self, **payload: Unpack[dto.IssuerUpdateDTO]
     ) -> pki.UpdateResult:
         return await self._pki_mgr.update_issuer(payload)
+
+    @exception_handler
+    @login_required
+    async def create_or_update_pki_role(
+        self, **payload: Unpack[dto.PKIRoleCreateDTO]
+    ) -> None:
+        return await self._pki_mgr.create_or_update_role(payload)

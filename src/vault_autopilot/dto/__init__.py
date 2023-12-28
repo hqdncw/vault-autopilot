@@ -1,14 +1,21 @@
 from typing import Union
 
-from .issuer import IssuerInitializeDTO
-from .password import PasswordInitializeDTO
-from .password_policy import PasswordPolicyInitializeDTO
+from .issuer import IssuerCheckOrSetDTO
+from .password import PasswordCheckOrSetDTO
+from .password_policy import PasswordPolicyCheckOrSetDTO
+from .pki_role import PKIRoleCheckOrSetDTO
 
-DTO = Union[IssuerInitializeDTO, PasswordInitializeDTO, PasswordPolicyInitializeDTO]
+DTO = Union[
+    IssuerCheckOrSetDTO,
+    PasswordCheckOrSetDTO,
+    PasswordPolicyCheckOrSetDTO,
+    PKIRoleCheckOrSetDTO,
+]
 
 __all__ = (
     "DTO",
-    "IssuerInitializeDTO",
-    "PasswordInitializeDTO",
-    "PasswordPolicyInitializeDTO",
+    "IssuerCheckOrSetDTO",
+    "PasswordCheckOrSetDTO",
+    "PasswordPolicyCheckOrSetDTO",
+    "PKIRoleCheckOrSetDTO",
 )

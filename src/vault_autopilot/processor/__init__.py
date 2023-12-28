@@ -1,9 +1,11 @@
-from .issuer import IssuerInitializeProcessor
-from .password import PasswordInitializeProcessor
-from .password_policy import PasswordPolicyInitializeProcessor
+from .issuer import IssuerCheckOrSetProcessor
+from .password import PasswordCheckOrSetProcessor
+from .password_policy import PasswordPolicyCheckOrSetProcessor
+from .pki_role import PKIRoleCheckOrSetProcessor
 
 __all__ = (
-    "IssuerInitializeProcessor",
-    "PasswordInitializeProcessor",
-    "PasswordPolicyInitializeProcessor",
+    "IssuerCheckOrSetProcessor",
+    "PasswordCheckOrSetProcessor",
+    "PasswordPolicyCheckOrSetProcessor",
+    "PKIRoleCheckOrSetProcessor",
 )

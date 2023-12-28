@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class Node(util.dep_manager.AbstractNode):
-    payload: dto.IssuerInitializeDTO
+class Node(util.dependency_chain.AbstractNode):
+    payload: dto.IssuerCheckOrSetDTO
 
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
@@ -22,7 +22,7 @@ class Node(util.dep_manager.AbstractNode):
         return f"Node({self.payload.absolute_path()})"
 
     @classmethod
-    def from_payload(cls, payload: dto.IssuerInitializeDTO) -> "Node":
+    def from_payload(cls, payload: dto.IssuerCheckOrSetDTO) -> "Node":
         """
         Creates a node from given payload.
 
@@ -34,14 +34,31 @@ class Node(util.dep_manager.AbstractNode):
 
 
 @dataclass(slots=True)
-class PlaceholderNode:
-    """Efficiently represents a :class:Node object before its details are available.
+class PlaceholderNode(util.dependency_chain.AbstractNode):
+    """
+    Efficiently represents a :class:`Node` object before its payload is available.
 
-    This class enables ordering dependencies without waiting for the full node
-    information.
+    When working with large datasets, it's often necessary to establish relationships
+    between nodes before their payloads are fully loaded. This class allows you to
+    create a placeholder node that can be used for ordering dependencies without having
+    to wait for the full node information.
+
+    Once a `PlaceholderNode` has been created, it can be used in place of a regular
+    `Node` object.
 
     Args:
-        node_hash: The hash of the placeholder node.
+        node_hash: A unique identifier for the node that can be used to compare
+            equality.
+
+    Example:
+        >>> payload = IssuerCheckOrSetDTO(kind="Issuer", spec={"name": "my-issuer",
+        ...                                                    "secret_engine": "pki"})
+        ...
+        ... # Create a placeholder node from an issuer absolute path
+        ... placeholder = PlaceholderNode.from_issuer_absolute_path(
+        ...     payload.absolute_path())
+        ...
+        ... assert hash(placeholder) == hash(Node.from_payload(payload))
     """
 
     node_hash: int
@@ -51,11 +68,12 @@ class PlaceholderNode:
 
     @classmethod
     def from_issuer_absolute_path(cls, path: str) -> "PlaceholderNode":
-        """Create a new :class:`PlaceholderNode` instance from an issuer absolute path.
+        """
+        Creates a new :class:`PlaceholderNode` instance from an issuer absolute path.
 
         Args:
-            path: The PKI engine mount path followed by the issuer name, separated
-                by a forward slash. For example: ``pki/my-issuer``.
+            path: The path must be in the format ``pki/my-issuer`` where ``pki`` is the
+                PKI engine mount path and ``my-issuer`` is the name of the issuer.
         """
         return cls(hash(path))
 
@@ -64,70 +82,63 @@ NodeType = Union[Node, PlaceholderNode]
 
 
 @dataclass(slots=True)
-class IssuerInitializeProcessor(abstract.AbstractProcessor):
+class IssuerCheckOrSetProcessor(abstract.AbstractProcessor):
     state: state.IssuerState
 
     def register_handlers(self) -> None:
         async def _on_issuer_discovered(ev: event.IssuerDiscovered) -> None:
             """
-            Responds to the :class:`event.IssuerDiscovered` event by performing the
-            following tasks:
+            Responds to the :class:`event.IssuerDiscovered` event by handling newly
+            discovered issuers and ensuring they are processed correctly.
 
-            #. If the payload includes the chaining field, it checks whether the
-               upstream issuer initialized on the Vault server. If it does, it schedules
-               all known intermediates, including the current one, to be initialized on
-               the Vault server, setting up a proper dependency chain. If the upstream
-               issuer does not exist, it initialises the given intermediate issuer later
-               when the upstream issuer is set up (the processor memorizes the payload).
-            #. If the payload does not include the chaining field, the function
-               initialises the issuer immediately without establishing dependencies.
+            When the payload contains the `chaining` field, check if the upstream issuer
+            is already processed. If it is, schedule all known intermediates, including
+            the current one, to be processed in the correct order using the established
+            dependency chain. If the upstream issuer is not processed, process the
+            current intermediate issuer and any other dependents at a later time, when
+            the upstream issuer becomes available.
+
+            If the payload does not contain the `chaining` field, process the issuer
+            immediately without establishing any dependencies.
 
             See also:
-                :meth:`_force_issuer_init_despite_upstream_absence`
+                :meth:`_process_outstanding_issuers_immediately`
             """
             if ev.payload.spec.get("chaining"):
-                async with self.state.dep_mgr.lock() as mgr:
-                    if (
-                        upstream := mgr.get_node_by_hash(
-                            (
-                                upstream_hash := hash(
-                                    ev.payload.upstream_issuer_absolute_path()
-                                )
-                            ),
-                            None,
-                        )
-                    ) is None:
+                async with self.state.dep_chain.lock() as mgr:
+                    upstream_hash = hash(ev.payload.upstream_issuer_absolute_path())
+                    upstream = mgr.get_node_by_hash(upstream_hash, None)
+
+                    if upstream is None:
                         upstream = PlaceholderNode(node_hash=upstream_hash)
                         mgr.add_node(upstream)
 
                     intermediate = Node.from_payload(ev.payload)
-                    if (
-                        existing_intermediate := mgr.get_node_by_hash(
-                            hash(ev.payload.absolute_path()),
-                            None,
-                        )
-                    ) is None:
+                    existing_intermediate = mgr.get_node_by_hash(
+                        hash(ev.payload.absolute_path()), None
+                    )
+
+                    if existing_intermediate is None:
                         mgr.add_node(intermediate)
                     elif isinstance(existing_intermediate, PlaceholderNode):
                         mgr.relabel_nodes(((existing_intermediate, intermediate),))
-                        del existing_intermediate
                     else:
                         raise RuntimeError("Duplicates aren't allowed: %r" % ev.payload)
+
+                    del existing_intermediate
 
                     mgr.add_edge(upstream, intermediate, "unsatisfied")
 
                     if not mgr.are_edges_satisfied(upstream):
-                        # skip creating intermediates as the upstream is not yet
+                        # skip setting up intermediates as the upstream is not yet
                         # available
                         return
             else:
-                async with self.state.dep_mgr.lock() as mgr:
-                    if (
-                        upstream := mgr.get_node_by_hash(
-                            (upstream_hash := hash(ev.payload.absolute_path())),
-                            None,
-                        )
-                    ) is None:
+                async with self.state.dep_chain.lock() as mgr:
+                    upstream_hash = hash(ev.payload.absolute_path())
+                    upstream = mgr.get_node_by_hash(upstream_hash, None)
+
+                    if upstream is None:
                         upstream = PlaceholderNode(node_hash=upstream_hash)
                         mgr.add_node(upstream)
 
@@ -144,14 +155,14 @@ class IssuerInitializeProcessor(abstract.AbstractProcessor):
                 _: The event triggered by the dispatcher when post-processing is
                     requested.
             """
-            await self._force_issuer_init_despite_upstream_absence()
+            await self._process_outstanding_issuers_immediately()
 
         self.state.observer.register((event.IssuerDiscovered,), _on_issuer_discovered)
         self.state.observer.register(
             (event.PostProcessRequested,), _on_postprocess_requested
         )
 
-    async def _process(self, payload: dto.IssuerInitializeDTO) -> None:
+    async def _process(self, payload: dto.IssuerCheckOrSetDTO) -> None:
         """Processes the given payload."""
         await self.state.iss_svc.create(payload)
         # TODO: Unchanged/Updated events
@@ -159,7 +170,7 @@ class IssuerInitializeProcessor(abstract.AbstractProcessor):
 
     async def _fulfill_unsatisfied_intermediates(self, upstream: NodeType) -> None:
         logger.debug("fulfilling intermediates for upstream: %r", hash(upstream))
-        async with self.state.dep_mgr.lock() as mgr:
+        async with self.state.dep_chain.lock() as mgr:
             for intermediate in (
                 unsatisfied_intermediates := tuple(mgr.find_unsatisfied_nodes(upstream))
             ):
@@ -177,12 +188,12 @@ class IssuerInitializeProcessor(abstract.AbstractProcessor):
             logger.debug("no outbound edges were found for node %r", hash(upstream))
             return
 
-        async with self.state.dep_mgr.lock() as mgr:
+        async with self.state.dep_chain.lock() as mgr:
             for intermediate in unsatisfied_intermediates:
                 mgr.update_edge_status(upstream, intermediate, status="satisfied")
 
             # Optimize memory usage by replacing nodes with payloads with placeholder
-            # nodes. Since the issuer has been created, we no longer need to store the
+            # nodes. Since the issuer has been processed, we no longer need to store the
             # payload data in the node.
             mgr.relabel_nodes(
                 chain(
@@ -212,11 +223,11 @@ class IssuerInitializeProcessor(abstract.AbstractProcessor):
         for intermediate in unsatisfied_intermediates:
             await self._fulfill_unsatisfied_intermediates(intermediate)
 
-    async def _force_issuer_init_despite_upstream_absence(self) -> None:
+    async def _process_outstanding_issuers_immediately(self) -> None:
         """
-        Initializes issuers for which the upstream has not yet been initialized.
+        Processes issuers for which the upstream has not yet been processed.
         """
-        async with self.state.dep_mgr.lock() as mgr:
+        async with self.state.dep_chain.lock() as mgr:
             for upstream, intmd in (edges := tuple(mgr.find_all_unsatisfied_edges())):
                 mgr.update_edge_status(upstream, intmd, status="in_process")
 
@@ -224,8 +235,7 @@ class IssuerInitializeProcessor(abstract.AbstractProcessor):
             for _, intmd in edges:
                 if not isinstance(intmd, Node):
                     logger.debug(
-                        "Unable to force the node to be processed as it has "
-                        "no payload."
+                        "Unable to force the node to be processed as it has no payload."
                     )
                     continue
 

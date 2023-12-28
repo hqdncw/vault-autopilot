@@ -11,14 +11,14 @@ logger = logging.getLogger(__name__)
 class IssuerService:
     client: asyva.Client
 
-    async def _create_intmd_issuer(self, payload: dto.IssuerInitializeDTO) -> None:
+    async def _create_intmd_issuer(self, payload: dto.IssuerCheckOrSetDTO) -> None:
         mount_path, certificate, chaining = (
             payload.spec["secret_engine"],
             payload.spec["certificate"],
             payload.spec.get("chaining"),
         )
 
-        assert chaining is not None, "Chaining field is required"
+        assert chaining is not None, "The 'chaining' field is required"
 
         upstream_ref = chaining["upstream_issuer_ref"].split("/", maxsplit=1)
         result = await self.client.set_signed_intermediate(
@@ -50,7 +50,7 @@ class IssuerService:
             mount_path=payload.spec["secret_engine"],
         )
 
-    async def _create_root_issuer(self, payload: dto.IssuerInitializeDTO) -> None:
+    async def _create_root_issuer(self, payload: dto.IssuerCheckOrSetDTO) -> None:
         spec = payload.spec
 
         await self.client.generate_root(
@@ -62,7 +62,7 @@ class IssuerService:
             ),
         )
 
-    async def create(self, payload: dto.IssuerInitializeDTO) -> None:
+    async def create(self, payload: dto.IssuerCheckOrSetDTO) -> None:
         if payload.spec.get("chaining"):
             await self._create_intmd_issuer(payload)
         else:

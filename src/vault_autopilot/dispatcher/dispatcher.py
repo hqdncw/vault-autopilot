@@ -46,19 +46,22 @@ class Dispatcher:
 
         # Initialize processors
         self._payload_proc_map = {
-            "Password": processor.PasswordInitializeProcessor(
+            "Password": processor.PasswordCheckOrSetProcessor(
                 state.PasswordState(client, self._sem, self._observer)
             ),
-            "Issuer": processor.IssuerInitializeProcessor(
+            "Issuer": processor.IssuerCheckOrSetProcessor(
                 state.IssuerState(client, self._sem, self._observer)
             ),
-            "PasswordPolicy": processor.PasswordPolicyInitializeProcessor(
+            "PasswordPolicy": processor.PasswordPolicyCheckOrSetProcessor(
                 state.PasswordPolicyState(client, self._sem, self._observer)
+            ),
+            "PKIRole": processor.PKIRoleCheckOrSetProcessor(
+                state.PKIRoleState(client, self._sem, self._observer)
             ),
         }
 
-        # register the handlers so the processors can handle events the Dispatcher
-        # triggers
+        # Register the handlers with the Processor objects, allowing them to handle
+        # events triggered by the Dispatcher
         for proc in self._payload_proc_map.values():
             proc.register_handlers()
 
@@ -76,6 +79,8 @@ class Dispatcher:
             return event.IssuerDiscovered(payload)
         if payload.kind == "PasswordPolicy":
             return event.PasswordPolicyDiscovered(payload)
+        if payload.kind == "PKIRole":
+            return event.PKIRoleDiscovered(payload)
 
         raise TypeError("Unexpected payload type: %r" % payload)
 

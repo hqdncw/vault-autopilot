@@ -259,3 +259,22 @@ class PKIManager(base.BaseManager):
 
         logger.debug(result)
         raise await exc.VaultAPIError.from_response("Failed to update issuer", resp)
+
+    async def create_or_update_role(self, payload: dto.PKIRoleCreateDTO) -> None:
+        async with self.new_session() as sess:
+            result = await (
+                resp := await sess.post(
+                    "/v1/%s/roles/%s" % (payload["mount_path"], payload["issuer_ref"]),
+                    data=util.model.model_dump_json(
+                        payload, exclude={"mount_path", "issuer_ref"}
+                    ),
+                )
+            ).json()
+
+        print(result)
+        if resp.status == http.HTTPStatus.OK:
+            return
+
+        raise await exc.VaultAPIError.from_response(
+            "Failed to create/update pki role", resp
+        )

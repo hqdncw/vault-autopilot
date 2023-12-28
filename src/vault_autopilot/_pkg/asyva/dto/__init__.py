@@ -6,6 +6,7 @@ from .issuer import (
     IssuerUpdateDTO,
     KeyUpdateDTO,
 )
+from .pki_role import PKIRoleCreateDTO
 from .secret import SecretCreateDTO, SecretGetVersionDTO
 
 __all__ = (
@@ -17,4 +18,5 @@ __all__ = (
     "KeyUpdateDTO",
     "SecretCreateDTO",
     "SecretGetVersionDTO",
+    "PKIRoleCreateDTO",
 )

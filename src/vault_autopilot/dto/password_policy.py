@@ -11,6 +11,6 @@ class PasswordPolicySpec(TypedDict):
     policy: password_policy.PasswordPolicy
 
 
-class PasswordPolicyInitializeDTO(abstract.AbstractDTO):
+class PasswordPolicyCheckOrSetDTO(abstract.AbstractDTO):
     kind: Literal["PasswordPolicy"]
     spec: PasswordPolicySpec
