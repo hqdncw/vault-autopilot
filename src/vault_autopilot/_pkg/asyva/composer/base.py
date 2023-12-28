@@ -14,13 +14,15 @@ class BaseComposer:
     taking care of the required headers, such as the `X-Vault-Request` header, so you
     don't have to worry about them.
 
-    :param base_url: The base URL of the Vault server.
-    :param skip_auto_headers: A list of header names that will be skipped when
-        autogenerating the request headers.
+    Args:
+        base_url: The base URL of the Vault server.
+        skip_auto_headers:
+            A list of header names that will be skipped when autogenerating the request
+            headers.
 
-    .. note::
+    Note:
         You can provide a custom `headers` dictionary to the `create()` method to
-        include additional information in the request.
+        include additional headers in the request.
     """
 
     base_url: str

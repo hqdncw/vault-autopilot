@@ -5,7 +5,7 @@ from typing import AsyncGenerator, Optional
 import aiohttp
 
 
-@dataclass
+@dataclass(slots=True)
 class BaseManager:
     _sess: Optional[aiohttp.ClientSession] = field(init=False, default=None)
 

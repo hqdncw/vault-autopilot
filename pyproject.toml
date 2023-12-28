@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license-files = { paths = ["LICENSE"] }
 authors = [
-  { name = "ab0142", email = "120799552+ab0142@users.noreply.github.com" },
+  { name = "hqdncw", email = "hqdncw@gmail.com" },
 ]
 keywords = [
   "hashicorp vault",
@@ -28,36 +28,39 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "click~=8.1.7",
   "pydantic~=2.4.2",
-  "pyyaml~=6.0.1",
   "aiohttp~=3.8.5",
-  "asyncstdlib~=3.10.9",
   "lazy-object-proxy~=1.9.0",
+  "networkx~=3.2.1",
+  "more-itertools~=10.1.0",
+  "ironfence~=0.1.0",
+  # TODO: temporary dependencies
   "jinja~=3.1.2",
 ]
 version = "0.1.0"
 
 [project.urls]
-Repository = "https://github.com/ab0142/vault-autopilot"
+Repository = "https://github.com/hqdncw/vault-autopilot"
 
 [project.optional-dependencies]
+cli = [
+  "click~=8.1.7",
+  "ruamel.yaml~=0.18.5"
+]
+# colorlog = [
+#   "colorlog~=6.8.0"
+# ]
 dev = [
   "black~=23.7.0",
   "isort~=5.12.0",
   "ruff~=0.0.285",
   "mypy~=1.5.1",
-  "pre-commit~=3.4.0",
-]
-types = [
-  "types-click~=7.1.8",
-  "types-dataclasses~=0.6.6",
-  "types-pyyaml~=6.0.12.12",
+  "pre-commit~=3.4.0"
 ]
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ["py311"]
 exclude = '''
 (
     \.git
@@ -96,13 +99,15 @@ warn_return_any = true
 follow_imports_for_stubs = true
 namespace_packages = true
 show_absolute_path = true
+enable_incomplete_feature = ["Unpack"]
 plugins = [
   "pydantic.mypy"
 ]
 
 [[tool.mypy.overrides]]
 module = [
-    "lazy_object_proxy.*",
+  "lazy_object_proxy.*",
+  "networkx.*"
 ]
 ignore_missing_imports = true
 

@@ -1,31 +1,26 @@
-import enum
-from typing import Any
+from typing import Annotated, Literal
 
+import annotated_types
 import pydantic
+from typing_extensions import TypedDict
 
-from . import base
+from . import abstract
 
-
-class StringEncoding(enum.StrEnum):
-    BASE64 = "base64"
-    UTF8 = "utf8"
+StringEncodingType = Literal["base64", "utf8"]
 
 
-class PasswordSecretKeys(base.BaseModel):
+class PasswordSpec(TypedDict):
+    secret_engine: str
+    path: str
     secret_key: str
-
-
-class PasswordSpec(base.SecretSpec):
-    secret_keys: PasswordSecretKeys
     policy_path: str
-    cas: int = pydantic.Field(ge=0)
-    encoding: StringEncoding
+    version: Annotated[int, annotated_types.Ge(1)]
+    encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
 
 
-class PasswordDTO(base.BaseDTO):
+class PasswordCheckOrSetDTO(abstract.AbstractDTO):
+    kind: Literal["Password"]
     spec: PasswordSpec
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, PasswordDTO):
-            raise TypeError()
-        return self.spec.path == other.spec.path
+    def absolute_path(self) -> str:
+        return "/".join((self.spec["secret_engine"], self.spec["path"]))
