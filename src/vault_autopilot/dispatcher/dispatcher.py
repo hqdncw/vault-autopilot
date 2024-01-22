@@ -45,18 +45,20 @@ class Dispatcher:
         self._is_concurrency_enabled = max_dispatch != 1
 
         # Initialize processors
-        self._payload_proc_map = {
+        self._payload_proc_map: dict[str, processor.AbstractProcessor] = {
             "Password": processor.PasswordCheckOrSetProcessor(
-                state.PasswordState(client, self._sem, self._observer)
+                state.PasswordState(self._sem, client, self._observer)
             ),
             "Issuer": processor.IssuerCheckOrSetProcessor(
-                state.IssuerState(client, self._sem, self._observer)
+                state.IssuerState(self._sem, client, self._observer)
             ),
             "PasswordPolicy": processor.PasswordPolicyCheckOrSetProcessor(
                 state.PasswordPolicyState(client, self._sem, self._observer)
             ),
             "PKIRole": processor.PKIRoleCheckOrSetProcessor(
-                state.PKIRoleState(client, self._sem, self._observer)
+                state.PKIRoleState(
+                    sem=self._sem, client=client, observer=self._observer
+                )
             ),
         }
 

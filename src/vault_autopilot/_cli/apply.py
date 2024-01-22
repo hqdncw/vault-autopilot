@@ -59,13 +59,6 @@ async def async_apply(
         yield click.get_binary_stream("stdin")
 
     async def start_dispatcher() -> None:
-        """
-        Ensures the client is authenticated before dispatching tasks.
-
-        The Dispatcher class requires an authenticated client, so we prioritize
-        authentication before calling .dispatch(). This ensures a seamless
-        transition between authentication and task execution.
-        """
         await client.authenticate(
             base_url=settings.base_url,
             authn=settings.auth,

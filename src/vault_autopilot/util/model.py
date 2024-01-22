@@ -14,14 +14,14 @@ CUSTOM_TYPES = {
     "tuple_type": "sequence_type",
     "union_tag_invalid": "enum_value_out_of_range",
     "union_tag_not_found": "missing",
-    "unexpected_keyword_argument": "extra_key",
+    "unexpected_keyword_argument": "extra_field",
 }
 CUSTOM_MESSAGES = {
     # https://docs.pydantic.dev/latest/errors/validation_errors/#model_type
-    "extra_key": "Extra keys not allowed",
-    "missing": "Key is required",
+    "extra_field": "Extra fields not allowed",
+    "missing": "Field is required",
     "enum_value_out_of_range": "Input must be set to one of the following values: "
-    "{expected_tags}, but it is currently set to '{tag}'",
+    "{expected_tags}",
     "mapping_type": "Input must be a valid mapping",
     "sequence_type": "Input must be a valid sequence",
     "too_short": (

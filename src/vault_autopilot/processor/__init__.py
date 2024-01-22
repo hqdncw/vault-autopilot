@@ -1,3 +1,4 @@
+from .abstract import AbstractProcessor
 from .issuer import IssuerCheckOrSetProcessor
 from .password import PasswordCheckOrSetProcessor
 from .password_policy import PasswordPolicyCheckOrSetProcessor
@@ -8,4 +9,5 @@ __all__ = (
     "PasswordCheckOrSetProcessor",
     "PasswordPolicyCheckOrSetProcessor",
     "PKIRoleCheckOrSetProcessor",
+    "AbstractProcessor",
 )

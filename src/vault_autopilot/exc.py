@@ -44,7 +44,7 @@ class ManifestSyntaxError(ManifestError):
     ctx: Context
 
     def format_message(self) -> str:
-        return "Failed to decode '%s': %s" % (self.ctx["filename"], self.message)
+        return "Decoding failed '%s': %s" % (self.ctx["filename"], self.message)
 
 
 @dataclass(slots=True)
@@ -60,4 +60,4 @@ class ManifestValidationError(ManifestError):
     ctx: Context
 
     def format_message(self) -> str:
-        return "Failed to validate '%s': %s" % (self.ctx["filename"], self.message)
+        return "Validation failed '%s': %s" % (self.ctx["filename"], self.message)

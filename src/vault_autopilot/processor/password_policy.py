@@ -1,8 +1,11 @@
+import logging
 from dataclasses import dataclass
 
 from .. import dto, state
 from ..dispatcher import event
 from . import abstract
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -26,4 +29,8 @@ class PasswordPolicyCheckOrSetProcessor(abstract.AbstractProcessor):
 
     async def _process(self, payload: dto.PasswordPolicyCheckOrSetDTO) -> None:
         await self.state.pwd_policy_svc.create_or_update(payload)
+        logger.debug(
+            "completed processing of password policy %r", payload.absolute_path()
+        )
+
         await self.state.observer.trigger(event.PasswordPolicyCreated(payload))

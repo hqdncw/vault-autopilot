@@ -2,6 +2,7 @@ import abc
 import logging
 from dataclasses import dataclass, field
 from typing import (
+    Callable,
     Generic,
     Iterable,
     Iterator,
@@ -12,15 +13,14 @@ from typing import (
     Union,
 )
 
-import more_itertools
 import networkx as nx
-
-logger = logging.getLogger(__name__)
-
 
 T = TypeVar("T")
 P = TypeVar("P")
 EdgeStatusType = Literal["unsatisfied", "in_process", "satisfied"]
+
+logger = logging.getLogger(__name__)
+default_obj = object()
 
 
 class AbstractNode:
@@ -32,7 +32,7 @@ class AbstractNode:
         """
 
 
-class _EdgeData(TypedDict):
+class _EdgeAttrs(TypedDict):
     status: EdgeStatusType
 
 
@@ -53,23 +53,32 @@ class DependencyChain(Generic[T]):
     def _raise_edge_not_found_exc(u: int, v: int) -> NoReturn:
         raise ValueError("Edge not found (u: %r, v: %r)" % (hash(u), hash(v)))
 
-    def _assert_node_presence(self, node: T) -> None:
-        assert hash(node) in self._graph.nodes
-
     @staticmethod
-    def _edge_is_unsatisfied(edge: tuple[int, int, _EdgeData]) -> bool:
+    def _edge_is_unsatisfied(edge: tuple[int, int, _EdgeAttrs]) -> bool:
         return edge[2]["status"] == "unsatisfied"
 
-    def _get_edge_data(self, u: int, v: int) -> _EdgeData:
+    @classmethod
+    def _edge_is_unsatisfied_with_exclude(
+        cls,
+        edge: tuple[int, int, _EdgeAttrs],
+        exclude: Callable[[tuple[int, int]], bool],
+    ) -> bool:
+        if exclude(edge[:2]):
+            return False
+        return cls._edge_is_unsatisfied(edge)
+
+    def _get_edge_data(self, u: int, v: int) -> _EdgeAttrs:
         return self._graph[u][v]  # type: ignore[no-any-return]
 
     def _get_node_payload(self, node_hash: int) -> T:
         return self._graph.nodes[node_hash]["payload"]  # type: ignore[no-any-return]
 
-    def add_node(self, node: T) -> None:
-        hash_ = hash(node)
-        self._graph.add_node(hash_, payload=node)
-        logger.debug("added node %r with payload %r", hash_, node)
+    def add_node(self, node: T) -> int:
+        node_hash = hash(node)
+
+        self._graph.add_node(node_hash, payload=node)
+        logger.debug("added node %r with payload %r", node_hash, node)
+        return node_hash
 
     def get_node_by_hash(self, value: int, default: P) -> Union[T, P]:
         if self._graph.nodes.get(value, default=None) is None:
@@ -93,8 +102,8 @@ class DependencyChain(Generic[T]):
         nx.set_node_attributes(
             self._graph,
             {
-                hash_: {"payload": node}
-                for hash_, node in ((hash(from_), to) for from_, to in pairs)
+                node_hash: {"payload": node}
+                for node_hash, node in ((hash(from_), to) for from_, to in pairs)
             },
         )
 
@@ -107,15 +116,17 @@ class DependencyChain(Generic[T]):
         """
         Adds an edge from u to v, indicating that v depends on u.
         """
-        self._assert_node_presence(u)
-        self._assert_node_presence(v)
-        u_hash, v_hash = hash(u), hash(v)
+        u_hash, v_hash = self.add_node(u), self.add_node(v)
         self._graph.add_edge(u_hash, v_hash, status=status)
         logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
 
+    def has_node(self, node: T) -> bool:
+        return self._graph.has_node(node)  # type: ignore[no-any-return]
+
+    def has_edge(self, u: T, v: T) -> bool:
+        return self._graph.has_edge(hash(u), hash(v))  # type: ignore[no-any-return]
+
     def update_edge_status(self, u: T, v: T, status: EdgeStatusType) -> None:
-        self._assert_node_presence(u)
-        self._assert_node_presence(v)
         u_hash, v_hash = hash(u), hash(v)
         try:
             self._graph[u_hash][v_hash]["status"] = status
@@ -130,22 +141,55 @@ class DependencyChain(Generic[T]):
             self._raise_edge_not_found_exc(u_hash, v_hash)
         return data["status"]
 
-    def are_edges_satisfied(self, node: T) -> bool:
-        """Checks whether the inbound edges of a node are satisfied."""
-        return not bool(
-            more_itertools.first_true(
-                self._graph.in_edges(hash(node), data=True, default={}),
-                pred=self._edge_is_unsatisfied,  # type: ignore[arg-type]
-                default=True,
-            )
+    def are_inbound_edges_satisfied(
+        self,
+        node: T,
+        default: P,
+        exclude: Callable[[tuple[int, int]], bool] = lambda _: False,
+    ) -> Union[bool, P]:
+        """
+        Returns True if all inbound edges to the given node are satisfied, False
+        otherwise.
+
+        If the node has no inbound edges, returns the default value.
+
+        Args:
+            default: The value to return if the node has no inbound edges.
+            exclude: A callable function that takes a tuple of two nodes and returns
+                True if the edge between them should be excluded from the
+                satisfaction check, False otherwise. Defaults to None,
+                which means all edges are included.
+        """
+        unsatisfied_edge = next(
+            filter(
+                lambda edge: self._edge_is_unsatisfied_with_exclude(
+                    edge, exclude  # pyright: ignore[reportGeneralTypeIssues]
+                ),
+                self._graph.in_edges(hash(node), data=True),
+            ),
+            default_obj,
         )
 
-    def find_unsatisfied_nodes(self, node: T) -> Iterator[T]:
-        """Yields nodes with unsatisfied inbound edges coming from the given node."""
+        if id(unsatisfied_edge) == id(default_obj):
+            return default
+
+        return not unsatisfied_edge
+
+    def filter_nodes_for_satisfaction(self, node: T) -> Iterator[T]:
+        """
+        Yields nodes that have all their inbound edges satisfied, except for one inbound
+        edge that comes from the specified node.
+        """
+        node_hash = hash(node)
+
         return (
             self._get_node_payload(nbr)
-            for nbr in self._graph.neighbors(hash(node))
-            if not self.are_edges_satisfied(self._graph.nodes[nbr]["payload"])
+            for nbr in self._graph.neighbors(node_hash)
+            if self.are_inbound_edges_satisfied(
+                self._graph.nodes[nbr]["payload"],
+                exclude=lambda edge: edge[0] == node_hash,
+                default=True,
+            )
         )
 
     def find_all_unsatisfied_edges(self) -> Iterator[tuple[T, T]]:
@@ -161,6 +205,6 @@ class DependencyChain(Generic[T]):
                 lambda edge: self._edge_is_unsatisfied(
                     edge  # pyright: ignore[reportGeneralTypeIssues]
                 ),
-                iter(self._graph.in_edges(data=True, default={})),
+                self._graph.in_edges(data=True, default={}),
             ),
         )

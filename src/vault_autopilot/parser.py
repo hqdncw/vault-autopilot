@@ -16,14 +16,16 @@ __all__ = ("QueueType", "EndByte", "ManifestParser")
 
 QueueType = asyncio.Queue[Union[dto.DTO, "EndByte"]]
 
-_logger = logging.getLogger(__name__)
-_KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
+logger = logging.getLogger(__name__)
+
+KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
     "Password": dto.PasswordCheckOrSetDTO,
     "Issuer": dto.IssuerCheckOrSetDTO,
     "PasswordPolicy": dto.PasswordPolicyCheckOrSetDTO,
     "PKIRole": dto.PKIRoleCheckOrSetDTO,
 }
-_loader = yaml.YAML(typ="rt")
+
+loader = yaml.YAML(typ="rt")
 
 
 class EndByte:
@@ -45,10 +47,10 @@ class ManifestParser:
     manifest_iterator: Iterator[IO[bytes]]
 
     async def execute(self) -> "QueueType":
-        _logger.debug("parsing files")
+        logger.debug("parsing files")
 
         def stream_documents(buf: IO[bytes]) -> Any:
-            return (obj for obj in _loader.load_all(buf))
+            return (obj for obj in loader.load_all(buf))
 
         for buf in self.manifest_iterator:
             iter_, fn = stream_documents(buf), buf.name
@@ -75,12 +77,12 @@ class ManifestParser:
                             ctx,
                         )
 
-                    if kind in _KIND_SCHEMA_MAP.keys():
-                        schema = _KIND_SCHEMA_MAP[kind]
+                    if kind in KIND_SCHEMA_MAP.keys():
+                        schema = KIND_SCHEMA_MAP[kind]
                     else:
                         raise exc.ManifestValidationError(
                             "Unsupported kind %r. Supported object kinds include: %s"
-                            % (kind, tuple(_KIND_SCHEMA_MAP.keys())),
+                            % (kind, tuple(KIND_SCHEMA_MAP.keys())),
                             ctx,
                         )
 
@@ -91,10 +93,10 @@ class ManifestParser:
                             str(util.model.convert_errors(ex)), ctx
                         )
 
-                    _logger.debug("put %r", payload)
+                    logger.debug("put %r", payload)
                     await self.queue.put(payload)
 
-        _logger.debug("parsed files successfully")
+        logger.debug("parsed files successfully")
         await self.queue.put(EndByte())
 
         return self.queue

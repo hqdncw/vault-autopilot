@@ -27,7 +27,7 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> _conf.Settings:
         payload = _loader.load(fn.read_bytes())
     except YAMLError as ex:
         raise ConfigSyntaxError(
-            "Invalid configuration file: Unable to decode %r: %s" % (str(fn), ex),
+            "Invalid configuration file: Decoding failed %r: %s" % (str(fn), ex),
             ctx=ConfigSyntaxError.Context(filename=fn),
         ) from ex
 
@@ -36,7 +36,7 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> _conf.Settings:
     except pydantic.ValidationError as ex:
         # TODO: prevent token leakage in case of validation error
         raise ConfigValidationError(
-            "Invalid configuration file: Failed to validate %s: %s"
+            "Invalid configuration file: Validation failed %s: %s"
             % (str(fn), util.model.convert_errors(ex)),
             ctx=ConfigValidationError.Context(filename=fn),
         ) from ex

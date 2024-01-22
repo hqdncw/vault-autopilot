@@ -14,3 +14,6 @@ class PasswordPolicySpec(TypedDict):
 class PasswordPolicyCheckOrSetDTO(abstract.AbstractDTO):
     kind: Literal["PasswordPolicy"]
     spec: PasswordPolicySpec
+
+    def absolute_path(self) -> str:
+        return self.spec["path"]

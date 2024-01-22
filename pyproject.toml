@@ -32,7 +32,6 @@ dependencies = [
   "aiohttp~=3.8.5",
   "lazy-object-proxy~=1.9.0",
   "networkx~=3.2.1",
-  "more-itertools~=10.1.0",
   "ironfence~=0.1.0",
   # TODO: temporary dependencies
   "jinja~=3.1.2",
@@ -107,7 +106,8 @@ plugins = [
 [[tool.mypy.overrides]]
 module = [
   "lazy_object_proxy.*",
-  "networkx.*"
+  "networkx.*",
+  "ruamel"
 ]
 ignore_missing_imports = true
 

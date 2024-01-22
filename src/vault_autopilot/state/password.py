@@ -6,6 +6,7 @@ import ironfence
 
 from .. import service, util
 from .._pkg import asyva
+from ..processor.abstract import ChainBasedProcessorState
 
 if typing.TYPE_CHECKING:
     from ..dispatcher import event
@@ -13,7 +14,7 @@ if typing.TYPE_CHECKING:
 
 
 @dataclass(slots=True)
-class PasswordState:
+class PasswordState(ChainBasedProcessorState["NodeType"]):
     client: InitVar[asyva.Client]
     pwd_svc: service.PasswordService = field(init=False)
     dep_chain: ironfence.Mutex[
