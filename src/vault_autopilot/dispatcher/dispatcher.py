@@ -7,7 +7,18 @@ import annotated_types
 
 from .. import dto, parser, processor, state, util
 from .._pkg import asyva
-from . import event
+from .event import (
+    CallbackType,
+    EventObserver,
+    EventType,
+    FilterType,
+    IssuerDiscovered,
+    PasswordDiscovered,
+    PasswordPolicyDiscovered,
+    PKIRoleDiscovered,
+    PostProcessRequested,
+    ResourceDiscovered,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +41,8 @@ class Dispatcher:
     max_dispatch: InitVar[MaxDispatchType] = 0
 
     _sem: asyncio.Semaphore = field(init=False)
-    _observer: event.EventObserver[event.EventType] = field(
-        init=False, default_factory=event.EventObserver
+    _observer: EventObserver[EventType] = field(
+        init=False, default_factory=EventObserver
     )
 
     def __post_init__(
@@ -67,25 +78,6 @@ class Dispatcher:
         for proc in self._payload_proc_map.values():
             proc.register_handlers()
 
-    async def _queue_iter(self) -> AsyncIterator[dto.DTO]:
-        while True:
-            item = await self.queue.get()
-            if isinstance(item, parser.EndByte):
-                break
-            yield item
-
-    def _build_discovery_event(self, payload: dto.DTO) -> event.ResourceDiscovered:
-        if payload.kind == "Password":
-            return event.PasswordDiscovered(payload)
-        if payload.kind == "Issuer":
-            return event.IssuerDiscovered(payload)
-        if payload.kind == "PasswordPolicy":
-            return event.PasswordPolicyDiscovered(payload)
-        if payload.kind == "PKIRole":
-            return event.PKIRoleDiscovered(payload)
-
-        raise TypeError("Unexpected payload type: %r" % payload)
-
     async def dispatch(self) -> None:
         async with asyncio.TaskGroup() as tg:
             async for payload in self._queue_iter():
@@ -99,4 +91,28 @@ class Dispatcher:
                 else:
                     await coro
 
-        await self._observer.trigger(event.PostProcessRequested())
+        await self._observer.trigger(PostProcessRequested())
+
+    async def register_handler(
+        self, filter_: FilterType[EventType], callback: CallbackType
+    ) -> None:
+        self._observer.register(filter_, callback)
+
+    async def _queue_iter(self) -> AsyncIterator[dto.DTO]:
+        while True:
+            item = await self.queue.get()
+            if isinstance(item, parser.EndByte):
+                break
+            yield item
+
+    def _build_discovery_event(self, payload: dto.DTO) -> ResourceDiscovered:
+        if payload.kind == "Password":
+            return PasswordDiscovered(payload)
+        if payload.kind == "Issuer":
+            return IssuerDiscovered(payload)
+        if payload.kind == "PasswordPolicy":
+            return PasswordPolicyDiscovered(payload)
+        if payload.kind == "PKIRole":
+            return PKIRoleDiscovered(payload)
+
+        raise TypeError("Unexpected payload type: %r" % payload)
