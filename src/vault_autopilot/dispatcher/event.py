@@ -21,6 +21,15 @@ class EventObserver(Generic[T]):
     _handlers: list[HandlerObject[T]] = field(init=False, default_factory=list)
 
     def register(self, filter_: FilterType[T], callback: CallbackType) -> None:
+        """
+        Registers a handler function to be called when an event of the specified type is
+        emitted.
+
+        Args:
+            filter_: A sequence of types that the event must match in order for the
+                handler to be called.
+            callback: The function to call when an event matches the filter.
+        """
         self._handlers.append(HandlerObject(filter_, callback))
 
     async def trigger(self, event: T) -> None:
