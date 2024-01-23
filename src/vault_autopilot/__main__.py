@@ -5,56 +5,64 @@ from typing import Optional
 import click
 import lazy_object_proxy
 import pydantic
-import yaml.error
+from ruamel import yaml
+from ruamel.yaml.error import YAMLError
 
-from vault_autopilot import conf, exc, util
-from vault_autopilot.cli.apply import apply
+from vault_autopilot import _conf, util
+from vault_autopilot._cli.apply import apply
+from vault_autopilot._cli.exc import ConfigSyntaxError, ConfigValidationError
 
 ConfigOption = Optional[pathlib.Path]
 
+_loader = yaml.YAML(typ="safe")
 
-def validate_config(ctx: click.Context, fn: ConfigOption) -> conf.Settings:
+
+def validate_config(ctx: click.Context, fn: ConfigOption) -> _conf.Settings:
     if fn is None:
         raise click.MissingParameter(
             param_type="option", param_hint="'-c' / '--config'", ctx=ctx
         )
 
     try:
-        payload = yaml.load(fn.read_bytes() if fn else bytes(), yaml.SafeLoader)
-    except yaml.error.MarkedYAMLError as ex:
-        raise exc.ManifestValidationError(str(ex), filename=str(fn)) from ex
+        payload = _loader.load(fn.read_bytes())
+    except YAMLError as ex:
+        raise ConfigSyntaxError(
+            "Invalid configuration file: Decoding failed %r: %s" % (str(fn), ex),
+            ctx=ConfigSyntaxError.Context(filename=fn),
+        ) from ex
 
     try:
-        res = conf.Settings.model_validate(payload)
+        res = _conf.Settings(**payload)
     except pydantic.ValidationError as ex:
         # TODO: prevent token leakage in case of validation error
-        raise exc.ManifestValidationError(
-            str(util.pydantic.convert_errors(ex)), filename=str(fn)
-        )
+        raise ConfigValidationError(
+            "Invalid configuration file: Validation failed %s: %s"
+            % (str(fn), util.model.convert_errors(ex)),
+            ctx=ConfigValidationError.Context(filename=fn),
+        ) from ex
 
-    assert isinstance(res, conf.Settings), "Expected %r, got %r" % (
-        conf.Settings.__name__,
+    assert isinstance(res, _conf.Settings), "Expected %r, got %r" % (
+        _conf.Settings.__name__,
         res,
     )
     return res
 
 
 @click.group()
-@click.option("-D", "--debug/--no-debug", default=False, help="Enable debug mode")
+@click.option("-D", "--debug/--no-debug", default=False, help="Enable debug mode.")
 @click.option(
     "-c",
     "--config",
-    type=click.Path(  # type: ignore
+    type=click.Path(
         dir_okay=False,
         exists=True,
-        resolve_path=True,
         readable=True,
-        path_type=pathlib.Path,  # pyright: ignore
+        path_type=pathlib.Path,
     ),
-    help="Path to a YAML configuration file",
+    help="Path to a YAML configuration file.",
 )
 @click.pass_context
-def cli(ctx: click.Context, debug: bool, config: ConfigOption = None) -> None:
+def cli(ctx: click.Context, debug: bool, config: ConfigOption) -> None:
     logging.basicConfig(
         level=logging.DEBUG if debug else logging.WARNING,
     )

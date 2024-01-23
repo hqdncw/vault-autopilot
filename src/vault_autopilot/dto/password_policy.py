@@ -1,18 +1,19 @@
-from typing import Any
+from typing import Literal
 
-from vault_autopilot._pkg import asyva
+from typing_extensions import TypedDict
 
-from . import base
-
-
-class PasswordPolicySpec(base.PathSpec, asyva.PasswordPolicy):
-    pass
+from .._pkg.asyva.dto import password_policy
+from . import abstract
 
 
-class PasswordPolicyDTO(base.BaseDTO):
+class PasswordPolicySpec(TypedDict):
+    path: str
+    policy: password_policy.PasswordPolicy
+
+
+class PasswordPolicyCheckOrSetDTO(abstract.AbstractDTO):
+    kind: Literal["PasswordPolicy"]
     spec: PasswordPolicySpec
 
-    def __eq__(self, other: Any) -> bool:
-        if not isinstance(other, PasswordPolicyDTO):
-            raise TypeError()
-        return self.spec.path == other.spec.path
+    def absolute_path(self) -> str:
+        return self.spec["path"]

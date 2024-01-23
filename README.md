@@ -1,3 +1,3 @@
 # vault-autopilot
 
-Effortlessly manage your secrets and other Vault resources with the power of automation.
+Effortlessly manage your Vault secrets with the power of automation.
