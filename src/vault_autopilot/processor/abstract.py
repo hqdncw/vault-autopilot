@@ -3,7 +3,7 @@ import logging
 from asyncio import Semaphore, TaskGroup
 from dataclasses import dataclass
 from itertools import groupby
-from typing import Any, Coroutine, Generic, Iterable, TypeVar
+from typing import Generic, Iterable, TypeVar
 
 from ironfence import Mutex
 
@@ -51,7 +51,7 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
         """
 
     @abc.abstractmethod
-    def _process(self, node: T) -> Coroutine[Any, Any, Any]:
+    async def _process(self, node: T) -> None:
         ...
 
     async def _schedule(self, node: T) -> None:
