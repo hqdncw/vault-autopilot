@@ -50,7 +50,7 @@ NodeType = Union[PKIRoleNode, IssuerNode]
 class PKIRoleCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
     state: state.PKIRoleState
 
-    async def get_upstreams(self, node: NodeType) -> Iterable[NodeType]:
+    async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
         assert isinstance(node, PKIRoleNode)
 
         return (

@@ -32,7 +32,7 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
     state: ChainBasedProcessorState[T]
 
     @abc.abstractmethod
-    async def get_upstreams(self, node: T) -> Iterable[T]:
+    async def build_upstreams(self, node: T) -> Iterable[T]:
         """
         Return an iterable of upstream nodes for the given node.
 
@@ -55,22 +55,22 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
         ...
 
     async def _schedule(self, node: T) -> None:
-        if upstream_list := await self.get_upstreams(node):
+        if upstream_list := await self.build_upstreams(node):
             async with self.state.dep_chain.lock() as mgr:
                 for upstream in upstream_list:
                     mgr.add_edge(upstream, node, "unsatisfied")
 
-            if mgr.are_inbound_edges_satisfied(node, default=False) is True:
-                # process the node immediately as all its inbound edges are satisfied
-                await self._process(node)
-            else:
+            if mgr.are_inbound_edges_satisfied(node, default=False) is not True:
                 return
+
+            # Process node immediately due to satisfied upstream edges.
+            await self._process(node)
 
             async with self.state.dep_chain.lock() as mgr:
                 for upstream in upstream_list:
                     mgr.update_edge_status(upstream, node, status="satisfied")
         else:
-            # the node can not have inbound edges so we can process it immediately
+            # No upstreams means the node's ready for immediate processing.
             async with self.state.dep_chain.lock() as mgr:
                 mgr.add_node(node)
 

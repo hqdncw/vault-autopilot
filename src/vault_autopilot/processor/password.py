@@ -40,7 +40,7 @@ NodeType = Union[PasswordNode, PasswordPolicyNode]
 class PasswordCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
     state: state.PasswordState
 
-    async def get_upstreams(self, node: NodeType) -> Iterable[NodeType]:
+    async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
         assert isinstance(node, PasswordNode)
 
         return (PasswordPolicyNode.from_path(node.payload.spec["path"]),)

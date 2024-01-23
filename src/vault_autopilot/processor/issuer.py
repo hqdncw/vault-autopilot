@@ -82,7 +82,7 @@ NodeType = Union[Node, PlaceholderNode]
 class IssuerCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
     state: state.IssuerState
 
-    async def get_upstreams(self, node: NodeType) -> Iterable[NodeType]:
+    async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
         assert isinstance(node, Node)
 
         if node.payload.spec.get("chaining"):
