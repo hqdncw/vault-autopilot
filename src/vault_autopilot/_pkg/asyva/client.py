@@ -18,7 +18,7 @@ from typing_extensions import Unpack
 
 from . import authenticator, composer, dto, exc, manager
 from .dto import password_policy
-from .manager import pki
+from .manager import kvv2, pki
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -52,10 +52,6 @@ def exception_handler(
                 host=ex.host,
                 port=ex.port,
             ) from ex
-        except exc.VaultAPIError as ex:
-            raise ex
-        except Exception as ex:
-            raise ex from ex
 
     return wrapper
 
@@ -125,9 +121,9 @@ class Client:
 
     @exception_handler
     @login_required
-    async def create_or_update_secret(
+    async def update_or_create_secret(
         self, **payload: Unpack[dto.SecretCreateDTO]
-    ) -> None:
+    ) -> kvv2.UpdateOrCreateResult:
         """
         Creates a new secret or updates an existing one.
 
@@ -145,23 +141,22 @@ class Client:
 
         References:
             https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
-
         """
-        await self._kvv2_mgr.create_or_update(payload)
+        return await self._kvv2_mgr.update_or_create(payload)
 
     @overload
-    async def create_or_update_password_policy(self, path: str, policy: str) -> None:
+    async def update_or_create_password_policy(self, path: str, policy: str) -> None:
         ...
 
     @overload
-    async def create_or_update_password_policy(
+    async def update_or_create_password_policy(
         self, path: str, policy: password_policy.PasswordPolicy
     ) -> None:
         ...
 
     @exception_handler
     @login_required
-    async def create_or_update_password_policy(
+    async def update_or_create_password_policy(
         self, path: str, policy: Union[password_policy.PasswordPolicy, str]
     ) -> None:
         """
@@ -175,7 +170,7 @@ class Client:
         References:
             https://developer.hashicorp.com/vault/api-docs/system/policies-password#create-update-password-policy
         """
-        await self._pwd_policy_mgr.create_or_update(
+        await self._pwd_policy_mgr.update_or_create(
             path=path,
             policy=(
                 await self._render_password_policy(policy=policy)
@@ -237,7 +232,14 @@ class Client:
 
     @exception_handler
     @login_required
-    async def create_or_update_pki_role(
+    async def get_issuer(
+        self, **payload: Unpack[dto.IssuerGetDTO]
+    ) -> Optional[pki.GetResult]:
+        return await self._pki_mgr.get_issuer(payload)
+
+    @exception_handler
+    @login_required
+    async def update_or_create_pki_role(
         self, **payload: Unpack[dto.PKIRoleCreateDTO]
     ) -> None:
-        return await self._pki_mgr.create_or_update_role(payload)
+        return await self._pki_mgr.update_or_create_role(payload)

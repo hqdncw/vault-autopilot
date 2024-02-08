@@ -1,6 +1,7 @@
 from .issuer import (
     IssuerGenerateIntmdCSRDTO,
     IssuerGenerateRootDTO,
+    IssuerGetDTO,
     IssuerSetSignedIntmdDTO,
     IssuerSignIntmdDTO,
     IssuerUpdateDTO,
@@ -12,6 +13,7 @@ from .secret import SecretCreateDTO, SecretGetVersionDTO
 __all__ = (
     "IssuerGenerateIntmdCSRDTO",
     "IssuerGenerateRootDTO",
+    "IssuerGetDTO",
     "IssuerSetSignedIntmdDTO",
     "IssuerSignIntmdDTO",
     "IssuerUpdateDTO",

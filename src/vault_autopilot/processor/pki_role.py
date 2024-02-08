@@ -11,15 +11,27 @@ from .issuer import PlaceholderNode as IssuerNode
 logger = logging.getLogger(__name__)
 
 
+# APPLY_STATUS_EVENT_MAP: dict[
+#     ApplyResultStatus, Type[Union[event.PKIRoleApplySuccess, event.PKIRoleApplyError]]
+# ] = {
+#     "verify_success": event.PKIRoleVerifySuccess,
+#     "create_success": event.PKIRoleCreateSuccess,
+#     "update_success": event.PKIRoleUpdateSuccess,
+#     "verify_error": event.PKIRoleVerifyError,
+#     "create_error": event.PKIRoleCreateError,
+#     "update_error": event.PKIRoleUpdateError,
+# }
+
+
 @dataclass(slots=True)
 class PKIRoleNode(AbstractNode):
-    payload: dto.PKIRoleCheckOrSetDTO
+    payload: dto.PKIRoleApplyDTO
 
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
 
     @classmethod
-    def from_payload(cls, payload: dto.PKIRoleCheckOrSetDTO) -> "PKIRoleNode":
+    def from_payload(cls, payload: dto.PKIRoleApplyDTO) -> "PKIRoleNode":
         return cls(payload)
 
 
@@ -47,7 +59,7 @@ NodeType = Union[PKIRoleNode, IssuerNode]
 
 
 @dataclass(slots=True)
-class PKIRoleCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
+class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
     state: state.PKIRoleState
 
     async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
@@ -60,31 +72,33 @@ class PKIRoleCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
         )
 
     def register_handlers(self) -> None:
-        async def _on_pki_role_discovered(
-            ev: event.PKIRoleDiscovered,
-        ) -> None:
-            await self._schedule(PKIRoleNode.from_payload(ev.payload))
+        async def _on_pki_role_apply_requested(ev: event.PKIRoleApplyRequested) -> None:
+            await self._schedule(PKIRoleNode.from_payload(ev.resource))
 
-        async def _on_issuer_processed(ev: event.IssuerProcessed) -> None:
+        async def _on_issuer_processed(ev: event.IssuerApplySuccess) -> None:
             async with self.state.dep_chain.lock() as mgr:
                 issuer_node = IssuerNode.from_issuer_absolute_path(
-                    ev.payload.absolute_path()
+                    ev.resource.absolute_path()
                 )
                 if not mgr.has_node(issuer_node):
                     mgr.add_node(issuer_node)
 
-            await self._satisfy_downstreams(
-                IssuerNode.from_issuer_absolute_path(ev.payload.absolute_path())
+            await self.satisfy_outbound_edges_for(
+                IssuerNode.from_issuer_absolute_path(ev.resource.absolute_path())
             )
 
         async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
-            await self._satisfy_remaining_downstreams()
+            await self.satisfy_any_downstreams()
 
         self.state.observer.register(
-            (event.PKIRoleDiscovered,), _on_pki_role_discovered
+            (event.PKIRoleApplyRequested,), _on_pki_role_apply_requested
         )
         self.state.observer.register(
-            (event.IssuerCreated, event.IssuerUpdated, event.IssuerUnchanged),
+            (
+                event.IssuerVerifySuccess,
+                event.IssuerUpdateSuccess,
+                event.IssuerCreateSuccess,
+            ),
             _on_issuer_processed,
         )
         self.state.observer.register(
@@ -94,9 +108,17 @@ class PKIRoleCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
     async def _process(self, node: NodeType) -> None:
         assert isinstance(node, PKIRoleNode)
 
-        await self.state.pki_role_svc.create_or_update(node.payload)
-        logger.debug(
-            "completed processing of PKI Role %r", node.payload.absolute_path()
-        )
+        await self.state.observer.trigger(event.PKIRoleApplyStarted(node.payload))
 
-        await self.state.observer.trigger(event.PKIRoleCreated(node.payload))
+        # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
+        try:
+            await self.state.pki_role_svc.update_or_create(node.payload)
+        except Exception:
+            await self.state.observer.trigger(event.PKIRoleCreateError(node.payload))
+            raise
+
+        await self.state.observer.trigger(event.PKIRoleCreateSuccess(node.payload))
+
+        logger.debug(
+            "pki role resource applying finished: %r", node.payload.absolute_path()
+        )

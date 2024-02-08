@@ -74,6 +74,17 @@ class IssuerRefField(TypedDict):
     issuer_ref: str
 
 
+class IssuerMutableFields(TypedDict):
+    leaf_not_after_behavior: NotRequired[LeafNotAfterBehaviorType]
+    manual_chain: NotRequired[tuple[str]]
+    usage: NotRequired[UsageType]
+    revocation_signature_algorithm: NotRequired[SignatureAlgorithmType]
+    issuing_certificates: NotRequired[tuple[str]]
+    crl_distribution_points: NotRequired[tuple[str]]
+    ocsp_servers: NotRequired[tuple[str]]
+    enable_aia_url_templating: NotRequired[bool]
+
+
 class IssuerGenerateRootDTO(
     CommonFields, KeyGenerationFields, ManagedKeyFields, MountPathField, IssuerNameField
 ):
@@ -94,19 +105,18 @@ class IssuerSignIntmdDTO(CommonFields, MountPathField, IssuerRefField):
     use_pss: NotRequired[bool]
 
 
-class IssuerUpdateDTO(MountPathField, IssuerNameField, IssuerRefField):
-    leaf_not_after_behavior: NotRequired[LeafNotAfterBehaviorType]
-    manual_chain: NotRequired[tuple[str]]
-    usage: NotRequired[UsageType]
-    revocation_signature_algorithm: NotRequired[SignatureAlgorithmType]
-    issuing_certificates: NotRequired[tuple[str]]
-    crl_distribution_points: NotRequired[tuple[str]]
-    ocsp_servers: NotRequired[tuple[str]]
-    enable_aia_url_templating: NotRequired[bool]
+class IssuerUpdateDTO(
+    MountPathField, IssuerNameField, IssuerRefField, IssuerMutableFields
+):
+    pass
 
 
 class IssuerSetSignedIntmdDTO(MountPathField):
     certificate: str
+
+
+class IssuerGetDTO(MountPathField, IssuerRefField):
+    pass
 
 
 class KeyUpdateDTO(MountPathField):

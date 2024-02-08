@@ -6,7 +6,7 @@ from .. import service
 from .._pkg import asyva
 
 if typing.TYPE_CHECKING:
-    from ..dispatcher.dispatcher import event
+    from ..dispatcher import event
 
 
 @dataclass(slots=True)

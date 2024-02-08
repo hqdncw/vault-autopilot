@@ -1,13 +1,13 @@
 from .abstract import AbstractProcessor
-from .issuer import IssuerCheckOrSetProcessor
-from .password import PasswordCheckOrSetProcessor
-from .password_policy import PasswordPolicyCheckOrSetProcessor
-from .pki_role import PKIRoleCheckOrSetProcessor
+from .issuer import IssuerApplyProcessor
+from .password import PasswordApplyProcessor
+from .password_policy import PasswordPolicyApplyProcessor
+from .pki_role import PKIRoleApplyProcessor
 
 __all__ = (
-    "IssuerCheckOrSetProcessor",
-    "PasswordCheckOrSetProcessor",
-    "PasswordPolicyCheckOrSetProcessor",
-    "PKIRoleCheckOrSetProcessor",
+    "IssuerApplyProcessor",
+    "PasswordApplyProcessor",
+    "PasswordPolicyApplyProcessor",
+    "PKIRoleApplyProcessor",
     "AbstractProcessor",
 )

@@ -2,6 +2,8 @@ import pathlib
 from dataclasses import dataclass
 from typing import NotRequired, TypedDict
 
+from . import dto
+
 __all__ = (
     "ApplicationError",
     "ManifestValidationError",
@@ -61,3 +63,16 @@ class ManifestValidationError(ManifestError):
 
     def format_message(self) -> str:
         return "Validation failed '%s': %s" % (self.ctx["filename"], self.message)
+
+
+@dataclass(slots=True)
+class SecretIntegrityError(ApplicationError):
+    pass
+
+
+@dataclass(slots=True)
+class SecretVersionMismatchError(SecretIntegrityError):
+    class Context(TypedDict):
+        resource: dto.VersionedSecretApplyDTO
+
+    ctx: Context

@@ -11,8 +11,8 @@ class PasswordPolicySpec(TypedDict):
     policy: password_policy.PasswordPolicy
 
 
-class PasswordPolicyCheckOrSetDTO(abstract.AbstractDTO):
-    kind: Literal["PasswordPolicy"]
+class PasswordPolicyApplyDTO(abstract.AbstractDTO):
+    kind: Literal["PasswordPolicy"] = "PasswordPolicy"
     spec: PasswordPolicySpec
 
     def absolute_path(self) -> str:

@@ -1,8 +1,23 @@
 import contextlib
 from dataclasses import dataclass, field
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional, Self
 
 import aiohttp
+from pydantic import BaseModel
+
+
+class AbstractResult(BaseModel):
+    request_id: str
+    lease_id: str
+    renewable: bool
+    lease_duration: int
+    wrap_info: Any
+    warnings: Optional[list[str]] = None
+    auth: Any
+
+    @classmethod
+    def from_response(cls, data: dict[str, Any]) -> Self:
+        return cls.model_construct(**data)  # type: ignore[return-value]
 
 
 @dataclass(slots=True)

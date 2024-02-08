@@ -41,128 +41,296 @@ class EventObserver(Generic[T]):
 
 
 @dataclass(slots=True)
-class PasswordDiscovered:
-    payload: dto.PasswordCheckOrSetDTO
+class PasswordApplyRequested:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordCreated:
-    payload: dto.PasswordCheckOrSetDTO
+class PasswordApplyStarted:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordUpdated:
-    payload: dto.PasswordCheckOrSetDTO
+class PasswordCreateError:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordUnchanged:
-    payload: dto.PasswordCheckOrSetDTO
+class PasswordUpdateError:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class IssuerDiscovered:
-    payload: dto.IssuerCheckOrSetDTO
+class PasswordCreateSuccess:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class IssuerCreated:
-    payload: dto.IssuerCheckOrSetDTO
+class PasswordUpdateSuccess:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class IssuerUpdated:
-    payload: dto.IssuerCheckOrSetDTO
+class PasswordVerifySuccess:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class IssuerUnchanged:
-    payload: dto.IssuerCheckOrSetDTO
+class PasswordVerifyError:
+    resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordPolicyDiscovered:
-    payload: dto.PasswordPolicyCheckOrSetDTO
+class IssuerApplyRequested:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordPolicyCreated:
-    payload: dto.PasswordPolicyCheckOrSetDTO
+class IssuerApplyStarted:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordPolicyUpdated:
-    payload: dto.PasswordPolicyCheckOrSetDTO
+class IssuerCreateError:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordPolicyUnchanged:
-    payload: dto.PasswordPolicyCheckOrSetDTO
+class IssuerUpdateError:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PKIRoleDiscovered:
-    payload: dto.PKIRoleCheckOrSetDTO
+class IssuerCreateSuccess:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PKIRoleCreated:
-    payload: dto.PKIRoleCheckOrSetDTO
+class IssuerUpdateSuccess:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PKIRoleUpdated:
-    payload: dto.PKIRoleCheckOrSetDTO
+class IssuerVerifySuccess:
+    resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class PKIRoleUnchanged:
-    payload: dto.PKIRoleCheckOrSetDTO
+class IssuerVerifyError:
+    resource: dto.IssuerApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyApplyRequested:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyApplyStarted:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyCreateError:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyUpdateError:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyVerifyError:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyCreateSuccess:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyUpdateSuccess:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PasswordPolicyVerifySuccess:
+    resource: dto.PasswordPolicyApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleApplyRequested:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleApplyStarted:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleCreateError:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleUpdateError:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleVerifyError:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleCreateSuccess:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleUpdateSuccess:
+    resource: dto.PKIRoleApplyDTO
+
+
+@dataclass(slots=True)
+class PKIRoleVerifySuccess:
+    resource: dto.PKIRoleApplyDTO
 
 
 @dataclass(slots=True)
 class PostProcessRequested:
     """
-    Once all manifests have been processed, this event is triggered by the dispatcher,
+    Once all manifests have been applied, this event is triggered by the dispatcher,
     allowing you to inspect resources that still have unfulfilled dependencies. This
-    might include situations where passwords are waiting for password policy processing
-    or intermediate issuers are waiting for upstream issuers to complete their
-    processing.
-
-    See also:
-        * :class:`PasswordProcessed`
-        * :class:`IssuerProcessed`
-        * :class:`PasswordPolicyProcessed`
+    might include situations where passwords are waiting for password policy applying
+    or intermediate issuers are waiting for upstream issuers to complete their applying.
     """
 
 
-ResourceDiscovered = Union[
-    PasswordDiscovered, IssuerDiscovered, PasswordPolicyDiscovered, PKIRoleDiscovered
+ResourceApplyRequested = Union[
+    PasswordApplyRequested,
+    IssuerApplyRequested,
+    PasswordPolicyApplyRequested,
+    PKIRoleApplyRequested,
 ]
-PasswordProcessed = Union[PasswordCreated, PasswordUpdated, PasswordUnchanged]
-IssuerProcessed = Union[IssuerCreated, IssuerUpdated, IssuerUnchanged]
-PasswordPolicyProcessed = Union[
-    PasswordPolicyCreated, PasswordPolicyUpdated, PasswordPolicyUnchanged
+ResourceApplyStarted = Union[
+    PasswordApplyStarted,
+    IssuerApplyStarted,
+    PasswordPolicyApplyStarted,
+    PKIRoleApplyStarted,
 ]
-PKIRoleProcessed = Union[PKIRoleCreated, PKIRoleUpdated, PKIRoleUnchanged]
+ResourceCreateError = Union[
+    PasswordCreateError,
+    IssuerCreateError,
+    PKIRoleCreateError,
+    PasswordPolicyCreateError,
+]
+ResourceUpdateError = Union[
+    PasswordUpdateError,
+    IssuerUpdateError,
+    PKIRoleUpdateError,
+    PasswordPolicyUpdateError,
+]
+ResourceCreateSuccess = Union[
+    PasswordCreateSuccess,
+    IssuerCreateSuccess,
+    PasswordPolicyCreateSuccess,
+    PKIRoleCreateSuccess,
+]
+ResourceUpdateSuccess = Union[
+    PasswordUpdateSuccess,
+    IssuerUpdateSuccess,
+    PasswordPolicyUpdateSuccess,
+    PKIRoleUpdateSuccess,
+]
+ResourceVerifySuccess = Union[
+    PasswordVerifySuccess,
+    IssuerVerifySuccess,
+    PasswordPolicyVerifySuccess,
+    PKIRoleVerifySuccess,
+]
+ResourceVerifyError = Union[
+    PasswordVerifyError,
+    IssuerVerifyError,
+    PasswordPolicyVerifyError,
+    PKIRoleVerifyError,
+]
+
+IssuerApplySuccess = Union[
+    IssuerCreateSuccess, IssuerUpdateSuccess, IssuerVerifySuccess
+]
+PasswordApplySuccess = Union[
+    PasswordCreateSuccess, PasswordUpdateSuccess, PasswordVerifySuccess
+]
+PasswordPolicyApplySuccess = Union[
+    PasswordPolicyCreateSuccess,
+    PasswordPolicyUpdateSuccess,
+    PasswordPolicyVerifySuccess,
+]
+PKIRoleApplySuccess = Union[
+    PKIRoleCreateSuccess, PKIRoleUpdateSuccess, PKIRoleVerifySuccess
+]
+ResourceApplySuccess = Union[
+    PasswordApplySuccess,
+    IssuerApplySuccess,
+    PasswordPolicyApplySuccess,
+    PKIRoleApplySuccess,
+]
+
+IssuerApplyError = Union[IssuerCreateError, IssuerUpdateError, IssuerVerifyError]
+PasswordApplyError = Union[
+    PasswordCreateError, PasswordUpdateError, PasswordVerifyError
+]
+PasswordPolicyApplyError = Union[
+    PasswordPolicyCreateError,
+    PasswordPolicyUpdateError,
+    PasswordPolicyVerifyError,
+]
+PKIRoleApplyError = Union[PKIRoleCreateError, PKIRoleUpdateError, PKIRoleVerifyError]
+ResourceApplyError = Union[
+    PasswordApplyError,
+    IssuerApplyError,
+    PasswordPolicyApplyError,
+    PKIRoleApplyError,
+]
 
 
 EventType = Union[
-    PasswordDiscovered,
-    PasswordCreated,
-    PasswordUpdated,
-    PasswordUnchanged,
-    IssuerDiscovered,
-    IssuerCreated,
-    IssuerUpdated,
-    IssuerUnchanged,
-    PasswordPolicyDiscovered,
-    PasswordPolicyCreated,
-    PasswordPolicyUpdated,
-    PasswordPolicyUnchanged,
-    PKIRoleDiscovered,
-    PKIRoleCreated,
-    PKIRoleUpdated,
-    PKIRoleUnchanged,
+    PasswordApplyRequested,
+    PasswordApplyStarted,
+    PasswordCreateError,
+    PasswordUpdateError,
+    PasswordVerifyError,
+    PasswordCreateSuccess,
+    PasswordUpdateSuccess,
+    PasswordVerifySuccess,
+    PasswordVerifyError,
+    IssuerApplyRequested,
+    IssuerApplyStarted,
+    IssuerCreateError,
+    IssuerUpdateError,
+    IssuerVerifyError,
+    IssuerCreateSuccess,
+    IssuerUpdateSuccess,
+    IssuerVerifySuccess,
+    PasswordPolicyApplyRequested,
+    PasswordPolicyApplyStarted,
+    PasswordPolicyCreateError,
+    PasswordPolicyUpdateError,
+    PasswordPolicyVerifyError,
+    PasswordPolicyCreateSuccess,
+    PasswordPolicyUpdateSuccess,
+    PasswordPolicyVerifySuccess,
+    PKIRoleApplyRequested,
+    PKIRoleApplyStarted,
+    PKIRoleCreateError,
+    PKIRoleUpdateError,
+    PKIRoleVerifyError,
+    PKIRoleCreateSuccess,
+    PKIRoleUpdateSuccess,
+    PKIRoleVerifySuccess,
     PostProcessRequested,
 ]

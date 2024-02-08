@@ -17,6 +17,7 @@ keywords = [
 # https://pypi.org/classifiers/
 classifiers = [
   "License :: OSI Approved :: MIT License",
+  # https://martin-thoma.com/software-development-stages/
   "Development Status :: 2 - Pre-Alpha",
   "Environment :: Console",
   "Framework :: AsyncIO",
@@ -33,6 +34,7 @@ dependencies = [
   "lazy-object-proxy~=1.9.0",
   "networkx~=3.2.1",
   "ironfence~=0.1.0",
+  "humanize~=4.9.0",
   # TODO: temporary dependencies
   "jinja2~=3.1.3",
 ]

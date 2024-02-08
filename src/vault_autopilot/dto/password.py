@@ -18,8 +18,8 @@ class PasswordSpec(TypedDict):
     encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
 
 
-class PasswordCheckOrSetDTO(abstract.AbstractDTO):
-    kind: Literal["Password"]
+class PasswordApplyDTO(abstract.AbstractDTO):
+    kind: Literal["Password"] = "Password"
     spec: PasswordSpec
 
     def absolute_path(self) -> str:

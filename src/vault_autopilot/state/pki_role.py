@@ -9,21 +9,20 @@ from .._pkg import asyva
 from ..processor.abstract import ChainBasedProcessorState
 
 if typing.TYPE_CHECKING:
-    from ..dispatcher.dispatcher import event
+    from ..dispatcher import event
     from ..processor.pki_role import NodeType
 
 
-@dataclass(slots=True, kw_only=True)
+@dataclass(slots=True)
 class PKIRoleState(ChainBasedProcessorState["NodeType"]):
     client: InitVar[asyva.Client]
     pki_role_svc: service.PKIRoleService = field(init=False)
     sem: asyncio.Semaphore
-    observer: "event.EventObserver[event.EventType]"
     dep_chain: ironfence.Mutex[
         util.dependency_chain.DependencyChain["NodeType"]
-    ] = field(
-        default_factory=lambda: ironfence.Mutex(util.dependency_chain.DependencyChain())
-    )
+    ] = field(init=False)
+    observer: "event.EventObserver[event.EventType]"
 
     def __post_init__(self, client: asyva.Client) -> None:
         self.pki_role_svc = service.PKIRoleService(client)
+        self.dep_chain = ironfence.Mutex(util.dependency_chain.DependencyChain())
