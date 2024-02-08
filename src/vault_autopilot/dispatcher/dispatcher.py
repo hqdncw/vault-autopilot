@@ -46,16 +46,16 @@ class Dispatcher:
 
         # Initialize processors
         self._payload_proc_map: dict[str, processor.AbstractProcessor] = {
-            "Password": processor.PasswordCheckOrSetProcessor(
-                state.PasswordState(self._sem, client, self._observer)
+            "Password": processor.PasswordApplyProcessor(
+                state.PasswordState(self._sem, client, observer=self._observer)
             ),
-            "Issuer": processor.IssuerCheckOrSetProcessor(
-                state.IssuerState(self._sem, client, self._observer)
+            "Issuer": processor.IssuerApplyProcessor(
+                state.IssuerState(self._sem, client, observer=self._observer)
             ),
-            "PasswordPolicy": processor.PasswordPolicyCheckOrSetProcessor(
-                state.PasswordPolicyState(client, self._sem, self._observer)
+            "PasswordPolicy": processor.PasswordPolicyApplyProcessor(
+                state.PasswordPolicyState(client, self._sem, observer=self._observer)
             ),
-            "PKIRole": processor.PKIRoleCheckOrSetProcessor(
+            "PKIRole": processor.PKIRoleApplyProcessor(
                 state.PKIRoleState(
                     sem=self._sem, client=client, observer=self._observer
                 )
@@ -67,30 +67,11 @@ class Dispatcher:
         for proc in self._payload_proc_map.values():
             proc.register_handlers()
 
-    async def _queue_iter(self) -> AsyncIterator[dto.DTO]:
-        while True:
-            item = await self.queue.get()
-            if isinstance(item, parser.EndByte):
-                break
-            yield item
-
-    def _build_discovery_event(self, payload: dto.DTO) -> event.ResourceDiscovered:
-        if payload.kind == "Password":
-            return event.PasswordDiscovered(payload)
-        if payload.kind == "Issuer":
-            return event.IssuerDiscovered(payload)
-        if payload.kind == "PasswordPolicy":
-            return event.PasswordPolicyDiscovered(payload)
-        if payload.kind == "PKIRole":
-            return event.PKIRoleDiscovered(payload)
-
-        raise TypeError("Unexpected payload type: %r" % payload)
-
     async def dispatch(self) -> None:
         async with asyncio.TaskGroup() as tg:
             async for payload in self._queue_iter():
                 # dispatch the payload to the relevant processor that can handle it
-                coro = self._observer.trigger(self._build_discovery_event(payload))
+                coro = self._observer.trigger(self._build_event_from_request(payload))
 
                 # If concurrency is enabled, create a new task limited by the semaphore
                 # otherwise, just wait for the coroutine to finish
@@ -100,3 +81,29 @@ class Dispatcher:
                     await coro
 
         await self._observer.trigger(event.PostProcessRequested())
+
+    def register_handler(
+        self, filter_: event.FilterType[event.EventType], callback: event.CallbackType
+    ) -> None:
+        self._observer.register(filter_, callback)
+
+    async def _queue_iter(self) -> AsyncIterator[dto.DTO]:
+        while True:
+            item = await self.queue.get()
+            if isinstance(item, parser.EndByte):
+                break
+            yield item
+
+    def _build_event_from_request(
+        self, payload: dto.DTO
+    ) -> event.ResourceApplyRequested:
+        if payload.kind == "Password":
+            return event.PasswordApplyRequested(payload)
+        if payload.kind == "Issuer":
+            return event.IssuerApplyRequested(payload)
+        if payload.kind == "PasswordPolicy":
+            return event.PasswordPolicyApplyRequested(payload)
+        if payload.kind == "PKIRole":
+            return event.PKIRoleApplyRequested(payload)
+
+        raise TypeError("Unexpected payload type: %r" % payload)

@@ -9,7 +9,7 @@ from ruamel import yaml
 from ruamel.yaml.error import YAMLError
 
 from vault_autopilot import _conf, util
-from vault_autopilot._cli.apply import apply
+from vault_autopilot._cli.commands.apply import apply
 from vault_autopilot._cli.exc import ConfigSyntaxError, ConfigValidationError
 
 ConfigOption = Optional[pathlib.Path]

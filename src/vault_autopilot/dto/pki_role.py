@@ -12,8 +12,8 @@ class PKIRoleSpec(TypedDict):
     role: pki_role.PKIRoleFields
 
 
-class PKIRoleCheckOrSetDTO(abstract.AbstractDTO):
-    kind: Literal["PKIRole"]
+class PKIRoleApplyDTO(abstract.AbstractDTO):
+    kind: Literal["PKIRole"] = "PKIRole"
     spec: PKIRoleSpec
 
     def absolute_path(self) -> str:

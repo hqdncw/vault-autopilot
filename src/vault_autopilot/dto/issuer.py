@@ -25,10 +25,11 @@ class IssuerSpec(TypedDict):
     secret_engine: str
     certificate: Certificate
     chaining: NotRequired[Chaining]
+    # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
 
 
-class IssuerCheckOrSetDTO(abstract.AbstractDTO):
-    kind: Literal["Issuer"]
+class IssuerApplyDTO(abstract.AbstractDTO):
+    kind: Literal["Issuer"] = "Issuer"
     spec: IssuerSpec
 
     def absolute_path(self) -> str:
@@ -37,3 +38,7 @@ class IssuerCheckOrSetDTO(abstract.AbstractDTO):
     def upstream_issuer_absolute_path(self) -> str:
         assert "chaining" in self.spec, "Chaining field is required"
         return self.spec["chaining"]["upstream_issuer_ref"]
+
+
+class IssuerGetDTO(issuer.IssuerGetDTO):
+    pass

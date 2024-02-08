@@ -1,6 +1,8 @@
 import http
 import logging
-from typing import cast
+from typing import Any, cast
+
+from typing_extensions import TypedDict
 
 from .. import constants, dto, exc
 from . import base
@@ -8,8 +10,21 @@ from . import base
 logger = logging.getLogger(__name__)
 
 
+class UpdateOrCreateResult(base.AbstractResult):
+    class Data(TypedDict):
+        created_time: str
+        custom_metadata: dict[str, Any]
+        deletion_time: str
+        destroyed: bool
+        version: int
+
+    data: Data
+
+
 class KVV2Manager(base.BaseManager):
-    async def create_or_update(self, payload: dto.SecretCreateDTO) -> None:
+    async def update_or_create(
+        self, payload: dto.SecretCreateDTO
+    ) -> UpdateOrCreateResult:
         """
         References:
             https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
@@ -26,11 +41,10 @@ class KVV2Manager(base.BaseManager):
         async with self.new_session() as sess:
             resp = await sess.post("/v1/%s/data/%s" % (mount_path, path), json=data)
 
-        if resp.status == http.HTTPStatus.OK:
-            return
-
         result = await resp.json()
-        logger.debug(result)
+        if resp.status == http.HTTPStatus.OK:
+            return UpdateOrCreateResult.from_response(result)
+
         if constants.CAS_MISMATCH in result["errors"]:
             ctx = exc.CASParameterMismatchError.Context(
                 secret_path="/".join((mount_path, path))
@@ -60,6 +74,8 @@ class KVV2Manager(base.BaseManager):
                 ),
                 ctx=ctx,
             )
+
+        logger.debug(result)
 
         raise await exc.VaultAPIError.from_response(
             "Failed to create/update secret", resp

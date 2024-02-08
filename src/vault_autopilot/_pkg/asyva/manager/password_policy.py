@@ -12,7 +12,7 @@ BASE_PATH = "/v1/sys/policies/password"
 
 
 class PasswordPolicyManager(base.BaseManager):
-    async def create_or_update(self, path: str, policy: str) -> None:
+    async def update_or_create(self, path: str, policy: str) -> None:
         async with self.new_session() as sess:
             resp = await sess.post(
                 "/".join((BASE_PATH, path)),

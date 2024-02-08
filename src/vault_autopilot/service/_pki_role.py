@@ -8,8 +8,8 @@ from .._pkg import asyva
 class PKIRoleService:
     client: asyva.Client
 
-    async def create_or_update(self, payload: dto.PKIRoleCheckOrSetDTO) -> None:
-        await self.client.create_or_update_pki_role(
+    async def update_or_create(self, payload: dto.PKIRoleApplyDTO) -> None:
+        await self.client.update_or_create_pki_role(
             name=payload.spec["name"],
             mount_path=payload.spec["secret_engine"],
             **util.model.model_dump(payload.spec["role"]),

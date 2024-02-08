@@ -1,17 +1,29 @@
 import logging
 from dataclasses import dataclass
-from typing import Iterable, Union
+from typing import Iterable, Type, Union
 
 from .. import dto, state, util
 from ..dispatcher import event
+from ..service.abstract import ApplyResult, ApplyResultStatus
 from .abstract import ChainBasedProcessor
 
 logger = logging.getLogger(__name__)
 
+APPLY_STATUS_EVENT_MAP: dict[
+    ApplyResultStatus, Type[Union[event.IssuerApplySuccess, event.IssuerApplyError]]
+] = {
+    "verify_success": event.IssuerVerifySuccess,
+    "create_success": event.IssuerCreateSuccess,
+    "update_success": event.IssuerUpdateSuccess,
+    "verify_error": event.IssuerVerifyError,
+    "create_error": event.IssuerCreateError,
+    "update_error": event.IssuerUpdateError,
+}
+
 
 @dataclass(slots=True)
 class Node(util.dependency_chain.AbstractNode):
-    payload: dto.IssuerCheckOrSetDTO
+    payload: dto.IssuerApplyDTO
 
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
@@ -20,7 +32,7 @@ class Node(util.dependency_chain.AbstractNode):
         return f"Node({self.payload.absolute_path()})"
 
     @classmethod
-    def from_payload(cls, payload: dto.IssuerCheckOrSetDTO) -> "Node":
+    def from_payload(cls, payload: dto.IssuerApplyDTO) -> "Node":
         """
         Creates a node from given payload.
 
@@ -48,8 +60,8 @@ class PlaceholderNode(util.dependency_chain.AbstractNode):
     `Node` object.
 
     Example:
-        >>> payload = IssuerCheckOrSetDTO(kind="Issuer", spec={"name": "my-issuer",
-        ...                                                    "secret_engine": "pki"})
+        >>> payload = IssuerApplyDTO(kind="Issuer", spec={"name": "my-issuer",
+        ...                                               "secret_engine": "pki"})
         ...
         ... # Create a placeholder node from an issuer absolute path
         ... placeholder = PlaceholderNode.from_issuer_absolute_path(
@@ -79,7 +91,7 @@ NodeType = Union[Node, PlaceholderNode]
 
 
 @dataclass(slots=True)
-class IssuerCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
+class IssuerApplyProcessor(ChainBasedProcessor[NodeType]):
     state: state.IssuerState
 
     async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
@@ -95,13 +107,15 @@ class IssuerCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
         return ()
 
     def register_handlers(self) -> None:
-        async def _on_issuer_discovered(ev: event.IssuerDiscovered) -> None:
-            await self._schedule(Node.from_payload(ev.payload))
+        async def _on_issuer_apply_requested(ev: event.IssuerApplyRequested) -> None:
+            await self._schedule(Node.from_payload(ev.resource))
 
         async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
-            await self._satisfy_remaining_downstreams()
+            await self.satisfy_any_downstreams()
 
-        self.state.observer.register((event.IssuerDiscovered,), _on_issuer_discovered)
+        self.state.observer.register(
+            (event.IssuerApplyRequested,), _on_issuer_apply_requested
+        )
         self.state.observer.register(
             (event.PostProcessRequested,), _on_postprocess_requested
         )
@@ -109,8 +123,20 @@ class IssuerCheckOrSetProcessor(ChainBasedProcessor[NodeType]):
     async def _process(self, node: NodeType) -> None:
         assert isinstance(node, Node)
 
-        await self.state.iss_svc.create(node.payload)
-        logger.debug("completed processing of issuer %r", node.payload.absolute_path())
+        await self.state.observer.trigger(event.IssuerApplyStarted(node.payload))
 
-        # TODO: Unchanged/Updated events
-        await self.state.observer.trigger(event.IssuerCreated(node.payload))
+        try:
+            result = await self.state.iss_svc.apply(node.payload)
+        except Exception as ex:
+            result = ApplyResult(status="verify_error", errors=(ex,))
+
+        await self.state.observer.trigger(
+            APPLY_STATUS_EVENT_MAP[result["status"]](node.payload)
+        )
+
+        if errors := result.get("errors"):
+            raise ExceptionGroup("Failed to apply issuer", errors)
+
+        logger.debug(
+            "issuer resource applying finished: %r", node.payload.absolute_path()
+        )
