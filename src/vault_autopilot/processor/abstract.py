@@ -4,8 +4,9 @@ from asyncio import Semaphore, TaskGroup
 from dataclasses import dataclass
 from itertools import groupby
 from typing import Generic, Iterable, TypeVar
-
 from ironfence import Mutex
+from ..dispatcher.event import EventObserver, EventType
+from .._pkg import asyva
 
 from ..util.coro import create_task_limited
 from ..util.dependency_chain import DependencyChain
@@ -15,123 +16,177 @@ T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
 
+@dataclass(slots=True)
 class AbstractProcessor(abc.ABC):
-    @abc.abstractmethod
-    def register_handlers(self) -> None:
-        ...
-
-
-@dataclass(kw_only=True)
-class ChainBasedProcessorState(Generic[T]):
+    client: asyva.Client
+    observer: EventObserver[EventType]
     sem: Semaphore
-    dep_chain: Mutex[DependencyChain[T]]
+
+    @abc.abstractmethod
+    def initialize(self) -> None: ...
 
 
 @dataclass(slots=True)
 class ChainBasedProcessor(AbstractProcessor, Generic[T]):
-    state: ChainBasedProcessorState[T]
+    dep_chain: Mutex[DependencyChain[T]]
 
     @abc.abstractmethod
-    async def build_upstreams(self, node: T) -> Iterable[T]:
+    async def _build_fallback_upstream_nodes(self, node: T) -> Iterable[T]:
         """
-        Return an iterable of upstream nodes for the given node.
+        Build fallback upstream nodes for a given node.
 
-        An upstream node is a node that has an incoming edge to the given node. In other
-        words, it is a node that is reachable from the given node by following an
-        incoming edge.
+        In a chain-based system, nodes rely on each other for input or processing. If a
+        node's primary upstream node fails or becomes unavailable, the system needs to
+        switch to a fallback upstream node to keep working. The
+        `_build_fallback_upstream_nodes` method finds and returns these fallback nodes.
+
+        Additionally, this method can help manage memory use by replacing processed
+        nodes with lightweight fallback nodes that don't have the original data. This
+        optimizes the system's memory usage and improves performance.
+
+        Note:
+            An upstream node is a node that has an outgoing edge to the given node. In
+            other words, it is a node that is reachable from the given node by following
+            an incoming edge.
 
         References:
             https://www.researchgate.net/figure/Upstream-and-downstream-nodes-in-a-topology_fig2_263090402
 
         Args:
-            node: The node for which to find the upstream nodes.
+            node: The node for which to build the fallback upstream nodes.
 
         Returns:
-            An iterable of upstream nodes. May be empty.
+            An iterable of fallback upstream nodes. May be empty.
         """
 
     @abc.abstractmethod
-    async def _process(self, node: T) -> None:
+    async def _flush(self, node: T) -> None:
         ...
 
-    async def _schedule(self, node: T) -> None:
-        if upstream_list := await self.build_upstreams(node):
-            async with self.state.dep_chain.lock() as mgr:
-                for upstream in upstream_list:
-                    mgr.add_edge(upstream, node, "unsatisfied")
+    async def schedule(self, node: T) -> None:
+        """
+        Schedule a node for flushing and manage its dependencies.
+
+        This method schedules a node for flushing, ensuring that all its upstream
+        dependencies are satisfied before flushing. If the node has no upstream
+        dependencies, it is directly scheduled for flushing.
+
+        Warning:
+            This method does not guarantee immediate flushing of the node. The actual
+            flushing may occur at a later time, depending on the satisfaction of
+            dependencies.
+
+        Args:
+            node: The node to be scheduled.
+
+        Returns:
+            None
+        """
+        async with self.dep_chain.lock() as mgr:
+            if mgr.has_node(node):
+                # TODO: handle duplicates in a more user-friendly way
+                raise RuntimeError("Duplicates aren't allowed", node)
+
+        if upstream_fbs := await self._build_fallback_upstream_nodes(node):
+            async with self.dep_chain.lock() as mgr:
+                for upstream in upstream_fbs:
+                    assert not mgr.has_edge(upstream, node), "Unexpected behavior"
+                    mgr.add_edge(upstream, node, "pending")
 
             if mgr.are_inbound_edges_satisfied(node, default=False) is not True:
                 return
 
-            # Process node immediately due to satisfied upstream edges.
-            await self._process(node)
+            await self._flush(node)
 
-            async with self.state.dep_chain.lock() as mgr:
-                for upstream in upstream_list:
+            async with self.dep_chain.lock() as mgr:
+                for upstream in upstream_fbs:
                     mgr.update_edge_status(upstream, node, status="satisfied")
         else:
-            # No upstreams means the node's ready for immediate processing.
-            async with self.state.dep_chain.lock() as mgr:
-                mgr.add_node(node)
+            async with self.dep_chain.lock() as mgr:
+                _ = mgr.add_node(node)
 
-            await self._process(node)
+            await self._flush(node)
 
-        await self.satisfy_outbound_edges_for(node)
+        await self.flush_pending_downstreams_for(node)
 
-        # TODO: call relabel_nodes() to reduce memory consumption.
+        # TODO: replace flushed nodes by fallback nodes to reduce memory consumption.
 
-    async def satisfy_outbound_edges_for(self, node: T) -> None:
+    async def flush_pending_downstreams_for(self, node: T) -> None:
+        """
+        Flushes the pending downstreams of a given node in the dependency chain.
+
+        Warning:
+            This method only flushes downstreams that have all their edges with status
+            'satisfied', except for the edge coming from the given node.
+
+        Args:
+            node: The node whose downstreams are to be flushed.
+
+        Returns:
+            None
+        """
         logger.debug(
-            "[%s] satisfying outbound edges for node %r",
+            "[%s] flushing pending downstreams for upstream %r",
             self.__class__.__name__,
             hash(node),
         )
 
-        async with self.state.dep_chain.lock() as mgr:
+        async with self.dep_chain.lock() as mgr:
             for downstream in (
-                downstream_list := tuple(mgr.filter_nodes_for_satisfaction(node))
+                downstream_list := tuple(
+                    mgr.filter_downstreams(
+                        node,
+                        function=lambda nbr: mgr.are_inbound_edges_satisfied(
+                            nbr,
+                            exclude=lambda edge: edge[0] == hash(node),
+                            default=True,
+                        ),
+                    )
+                )
             ):
-                mgr.update_edge_status(node, downstream, status="in_process")
+                mgr.update_edge_status(node, downstream, status="in_progress")
 
         if downstream_list:
             async with TaskGroup() as tg:
                 for downstream in downstream_list:
-                    await self._create_task(tg, downstream)
+                    await self._flush_limited(tg, downstream)
         else:
             logger.debug(
-                "[%s] no outbound edges were found for node %r",
+                "[%s] no pending downstreams were found for node %r, flushing aborted",
                 self.__class__.__name__,
                 hash(node),
             )
+            return
 
-        async with self.state.dep_chain.lock() as mgr:
+        async with self.dep_chain.lock() as mgr:
             for downstream in downstream_list:
-                mgr.update_edge_status(node, downstream, status="satisfied")
+                for upstream in mgr.filter_upstreams(downstream, lambda _: True):
+                    mgr.update_edge_status(upstream, downstream, status="satisfied")
 
         for downstream in downstream_list:
-            await self.satisfy_outbound_edges_for(downstream)
+            await self.flush_pending_downstreams_for(downstream)
 
-    async def satisfy_any_downstreams(self) -> None:
-        logger.debug("[%s] satisfying any outbound edges", self.__class__.__name__)
+    async def flush_any_pending_downstreams(self) -> None:
+        """Flushes any pending downstreams in the dependency chain."""
 
-        async with self.state.dep_chain.lock() as mgr:
-            edges = tuple(mgr.find_all_unsatisfied_edges())
+        logger.debug("[%s] flushing any pending downstreams", self.__class__.__name__)
+
+        async with self.dep_chain.lock() as mgr:
+            edges = tuple(mgr.get_pending_edges())
 
             for upstream, downstream in edges:
-                mgr.update_edge_status(upstream, downstream, status="in_process")
+                mgr.update_edge_status(upstream, downstream, status="in_progress")
 
         async with TaskGroup() as tg:
             for upstream, edge_batch in groupby(edges, key=lambda t: t[0]):
                 for edge in edge_batch:
-                    logger.debug("trying to satisfy edge %r", hash(edge))
-                    await self._create_task(tg, edge[1])
+                    logger.debug("flushing downstream %r", edge)
+                    await self._flush_limited(tg, edge[1])
 
-        async with self.state.dep_chain.lock() as mgr:
+        async with self.dep_chain.lock() as mgr:
             for upstream, downstream in edges:
                 mgr.update_edge_status(upstream, downstream, status="satisfied")
 
-    async def _create_task(self, tg: TaskGroup, node: T) -> None:
-        logger.debug(
-            "[%s] create a task for a node %r", self.__class__.__name__, hash(node)
-        )
-        await create_task_limited(tg, self.state.sem, self._process(node))
+    async def _flush_limited(self, tg: TaskGroup, node: T) -> None:
+        logger.debug("creating task for flushing node %s", node)
+        await create_task_limited(tg, self.sem, self._flush(node))

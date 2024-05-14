@@ -4,13 +4,11 @@ from dataclasses import dataclass, field
 from typing import (
     Any,
     Callable,
-    Coroutine,
-    Optional,
     ParamSpec,
     TypeVar,
-    Union,
     overload,
 )
+from collections.abc import Coroutine
 
 import aiohttp
 import jinja2
@@ -47,8 +45,8 @@ def exception_handler(
             return await func(*args, **kwargs)
         except aiohttp.ClientConnectorError as ex:
             raise exc.ConnectionRefusedError(
-                "The connection to the server {host}:{port} was refused - did you "
-                "specify the right host or port?",
+                "The connection to the server {host}:{port} was refused - did you \
+                specify the right host or port?",
                 host=ex.host,
                 port=ex.port,
             ) from ex
@@ -56,7 +54,7 @@ def exception_handler(
     return wrapper
 
 
-@dataclass
+@dataclass(slots=True)
 class Client:
     # conn: Optional[aiohttp.BaseConnector] = None
     # sslcontext: Optional[ssl.SSLContext] = None
@@ -69,7 +67,7 @@ class Client:
             loader=jinja2.PackageLoader("vault_autopilot._pkg.asyva"), enable_async=True
         ),
     )
-    _authn_sess: Optional[aiohttp.ClientSession] = field(init=False, default=None)
+    _authn_sess: aiohttp.ClientSession | None = field(init=False, default=None)
     _kvv2_mgr: manager.KVV2Manager = field(
         init=False, default_factory=manager.KVV2Manager
     )
@@ -77,6 +75,7 @@ class Client:
         init=False, default_factory=manager.PasswordPolicyManager
     )
     _pki_mgr: manager.PKIManager = field(init=False, default_factory=manager.PKIManager)
+    _render_password_policy: functools.partial[Coroutine[Any, Any, str]] = field(init=False)
 
     def __post_init__(self) -> None:
         self._render_password_policy = functools.partial(
@@ -92,7 +91,7 @@ class Client:
         self,
         base_url: str,
         authn: authenticator.AbstractAuthenticator,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
     ) -> None:
         assert (
             not self.is_authenticated
@@ -145,19 +144,19 @@ class Client:
         return await self._kvv2_mgr.update_or_create(payload)
 
     @overload
-    async def update_or_create_password_policy(self, path: str, policy: str) -> None:
-        ...
+    async def update_or_create_password_policy(
+        self, path: str, policy: str
+    ) -> None: ...
 
     @overload
     async def update_or_create_password_policy(
         self, path: str, policy: password_policy.PasswordPolicy
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @exception_handler
     @login_required
     async def update_or_create_password_policy(
-        self, path: str, policy: Union[password_policy.PasswordPolicy, str]
+        self, path: str, policy: password_policy.PasswordPolicy| str
     ) -> None:
         """
         Creates a new password policy or updates an existing one.
@@ -234,7 +233,7 @@ class Client:
     @login_required
     async def get_issuer(
         self, **payload: Unpack[dto.IssuerGetDTO]
-    ) -> Optional[pki.GetResult]:
+    ) -> pki.GetResult | None:
         return await self._pki_mgr.get_issuer(payload)
 
     @exception_handler

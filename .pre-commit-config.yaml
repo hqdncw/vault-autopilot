@@ -1,6 +1,6 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+    rev: v4.6.0
     hooks:
       - id: check-added-large-files
       - id: check-case-conflict
@@ -17,30 +17,17 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.1.14
+    rev: v0.4.2
     hooks:
     - id: ruff
 
-  - repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-      - id: black
-        files: '^(src)'
-
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        name: isort
-        args: [--check]
-
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
+    rev: v1.10.0
     hooks:
       - id: mypy
         additional_dependencies:
           - "click~=8.1.7"
-          - "pydantic~=2.4.2"
+          - "pydantic~=2.7.1"
           - "ruamel.yaml~=0.18.5"
           - "humanize~=4.9.0"
 
@@ -50,7 +37,7 @@ repos:
       - id: codespell
         additional_dependencies: ["tomli"]
 
-  - repo: https://github.com/commitizen-tools/commitizen
-    rev: v3.13.0
+  - repo: https://github.com/DetachHead/basedpyright
+    rev: v1.11.0
     hooks:
-      - id: commitizen
+      - id: basedpyright

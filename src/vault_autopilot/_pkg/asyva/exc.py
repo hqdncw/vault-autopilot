@@ -1,8 +1,9 @@
 from dataclasses import dataclass
-from typing import Iterable, NotRequired, Optional
+from typing import Any, NotRequired
+from collections.abc import Iterable
 
 import aiohttp
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, override
 
 
 @dataclass(slots=True)
@@ -26,8 +27,9 @@ class ConnectionRefusedError(AsyvaError):
     """
 
     host: str
-    port: Optional[int]
+    port: int | None
 
+    @override
     def __str__(self) -> str:
         return self.message.format(host=self.host, port=self.port)
 
@@ -39,10 +41,11 @@ class VaultAPIError(AsyvaError):
     """
 
     message: str
-    errors: Optional[Iterable[str]] = None
-    method: Optional[str] = None
-    url: Optional[str] = None
+    errors: Iterable[str] | None = None
+    method: str | None = None
+    url: str | None = None
 
+    @override
     def __str__(self) -> str:
         msg = self.message
 
@@ -70,7 +73,7 @@ class VaultAPIError(AsyvaError):
             503: VaultDownError,
         }
 
-        errors = await resp.json()
+        errors: dict[Any, Any] = await resp.json()
         return _STATUS_EXCEPTION_MAP.get(resp.status, UnexpectedError)(
             message=message,
             errors=errors.get("errors"),
@@ -144,6 +147,7 @@ class PasswordPolicyNotFoundError(VaultAPIError):
 
     policy_name: str
 
+    @override
     def __str__(self) -> str:
         return self.message.format(policy_name=self.policy_name)
 
@@ -172,6 +176,7 @@ class CASParameterMismatchError(VaultAPIError):
 
     ctx: Context
 
+    @override
     def __str__(self) -> str:
         return self.message.format(
             secret_path=self.ctx["secret_path"],
@@ -197,6 +202,7 @@ class IssuerNameTakenError(VaultAPIError):
 
     ctx: Context
 
+    @override
     def __str__(self) -> str:
         return self.message.format(
             issuer_name=self.ctx["issuer_name"],

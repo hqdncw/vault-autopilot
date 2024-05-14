@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
-from .. import dto, util
+from vault_autopilot.util.model import model_dump
+
+from .. import dto
 from .._pkg import asyva
 
 
@@ -12,5 +14,5 @@ class PKIRoleService:
         await self.client.update_or_create_pki_role(
             name=payload.spec["name"],
             mount_path=payload.spec["secret_engine"],
-            **util.model.model_dump(payload.spec["role"]),
+            **model_dump(payload.spec["role"]),
         )

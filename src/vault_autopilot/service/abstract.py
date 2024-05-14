@@ -46,18 +46,18 @@ class VersionedSecretApplyMixin:
 
                 if required_cas == 0:
                     exc = SecretVersionMismatchError(
-                        "Resource %r version mismatch: Expected version: %d (to "
-                        "generate the secret data), got: %d. Please enter the correct "
-                        "version and try again."
+                        "Resource %r version mismatch: Expected version: %d (to \
+                        generate the secret data), got: %d. Please enter the correct \
+                        version and try again."
                         % (payload.absolute_path(), required_cas + 1, provided_version),
                         ctx,
                     )
                 else:
                     exc = SecretVersionMismatchError(
-                        "Resource %r version mismatch. Expected either version "
-                        "%d (to keep the secret data untouched) or version %d (to "
-                        "regenerate the secret data). Instead, version %r was provided."
-                        " Please enter the correct version and try again."
+                        "Resource %r version mismatch. Expected either version \
+                        %d (to keep the secret data untouched) or version %d (to \
+                        regenerate the secret data). Instead, version %r was provided. \
+                        Please enter the correct version and try again."
                         % (
                             payload.absolute_path(),
                             required_cas,
@@ -81,5 +81,4 @@ class VersionedSecretApplyMixin:
         )
 
     @abstractmethod
-    async def check_and_set(self, payload: VersionedSecretApplyDTO) -> None:
-        ...
+    async def check_and_set(self, payload: VersionedSecretApplyDTO) -> None: ...

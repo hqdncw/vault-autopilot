@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing_extensions import override
 
 from .. import dto, util
 from .._pkg import asyva
@@ -12,14 +13,13 @@ def encode(value: str, encoding: StringEncodingType) -> str:
             return util.encoding.base64_encode(value)
         case "utf8":
             return value
-        case _:
-            raise NotImplementedError("Unknown string encoding present")
 
 
 @dataclass(slots=True)
 class PasswordService(abstract.VersionedSecretApplyMixin):
     client: asyva.Client
 
+    @override
     async def check_and_set(self, payload: dto.PasswordApplyDTO) -> None:
         """
         Sets a password secret with the given payload and version, while ensuring that
@@ -44,7 +44,7 @@ class PasswordService(abstract.VersionedSecretApplyMixin):
         value = await self.client.generate_password(policy_path=spec["policy_path"])
 
         # may raise a CASParameterMismatchError
-        await self.client.update_or_create_secret(
+        _ = await self.client.update_or_create_secret(
             path=spec["path"],
             data={spec["secret_key"]: encode(value=value, encoding=spec["encoding"])},
             cas=spec["version"] - 1,

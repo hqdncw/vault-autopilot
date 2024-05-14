@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated
 
 import annotated_types
 from typing_extensions import TypedDict
@@ -6,7 +6,7 @@ from typing_extensions import TypedDict
 
 class CharsetRule(TypedDict):
     charset: Annotated[str, annotated_types.MinLen(1)]
-    min_chars: Optional[Annotated[int, annotated_types.Ge(0)]]
+    min_chars: Annotated[int, annotated_types.Ge(0)] | None
 
 
 class PasswordPolicy(TypedDict):

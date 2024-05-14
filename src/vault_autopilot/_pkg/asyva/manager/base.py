@@ -1,6 +1,7 @@
 import contextlib
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator, Optional, Self
+from typing import Any, Self
+from collections.abc import AsyncGenerator
 
 import aiohttp
 from pydantic import BaseModel
@@ -12,7 +13,7 @@ class AbstractResult(BaseModel):
     renewable: bool
     lease_duration: int
     wrap_info: Any
-    warnings: Optional[list[str]] = None
+    warnings: list[str] | None = None
     auth: Any
 
     @classmethod
@@ -22,7 +23,7 @@ class AbstractResult(BaseModel):
 
 @dataclass(slots=True)
 class BaseManager:
-    _sess: Optional[aiohttp.ClientSession] = field(init=False, default=None)
+    _sess: aiohttp.ClientSession | None = field(init=False, default=None)
 
     def configure(self, sess: aiohttp.ClientSession) -> None:
         self._sess = sess

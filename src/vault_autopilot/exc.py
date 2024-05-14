@@ -1,6 +1,7 @@
 import pathlib
 from dataclasses import dataclass
 from typing import NotRequired, TypedDict
+from typing_extensions import override
 
 from . import dto
 
@@ -18,14 +19,16 @@ class ApplicationError(Exception):
     def format_message(self) -> str:
         return self.message
 
+    @override
     def __str__(self) -> str:
         return self.format_message()
 
 
-class FileContext(TypedDict):
+class Location(TypedDict):
     filename: pathlib.Path
     line: NotRequired[int]
     col: NotRequired[int]
+    offset: NotRequired[int]
 
 
 @dataclass(slots=True)
@@ -39,14 +42,15 @@ class ManifestSyntaxError(ManifestError):
     Raised when there is an issue with parsing a given manifest file.
     """
 
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     message: str
     ctx: Context
 
+    @override
     def format_message(self) -> str:
-        return "Decoding failed '%s': %s" % (self.ctx["filename"], self.message)
+        return "Decoding failed '%s': %s" % (self.ctx["loc"]["filename"], self.message)
 
 
 @dataclass(slots=True)
@@ -55,14 +59,15 @@ class ManifestValidationError(ManifestError):
     Raised when there is an issue with validating a given manifest file.
     """
 
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     message: str
     ctx: Context
 
+    @override
     def format_message(self) -> str:
-        return "Validation failed '%s': %s" % (self.ctx["filename"], self.message)
+        return "Validation failed '%s': %s" % (self.ctx["loc"]["filename"], self.message)
 
 
 @dataclass(slots=True)

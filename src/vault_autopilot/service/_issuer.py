@@ -1,8 +1,9 @@
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
-from .. import dto, util
+from ..util.model import model_dump
+
+from .. import dto
 from .._pkg import asyva
 from .._pkg.asyva.manager.pki import GetResult
 from . import abstract
@@ -47,7 +48,7 @@ class IssuerService:
                         )
                     ).data["csr"],
                     use_csr_values=True,
-                    **util.model.model_dump(chaining, exclude={"issuer_ref"}),
+                    **model_dump(chaining, exclude={"issuer_ref"}),
                 )
             ).data["certificate"],
             mount_path=mount_path,
@@ -59,7 +60,7 @@ class IssuerService:
         )
 
         # Set issuer name
-        await self.client.update_issuer(
+        _ = await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
             issuer_name=payload.spec["name"],
             mount_path=payload.spec["secret_engine"],
@@ -68,10 +69,10 @@ class IssuerService:
     async def _create_root_issuer(self, payload: dto.IssuerApplyDTO) -> None:
         spec = payload.spec
 
-        await self.client.generate_root(
+        _ = await self.client.generate_root(
             issuer_name=spec["name"],
             mount_path=spec["secret_engine"],
-            **util.model.model_dump(
+            **model_dump(
                 spec["certificate"],
                 exclude={"add_basic_constraints"},
             ),
@@ -85,7 +86,7 @@ class IssuerService:
 
         logger.debug("created issuer at path: %r", payload.absolute_path())
 
-    async def get(self, payload: dto.IssuerGetDTO) -> Optional[GetResult]:
+    async def get(self, payload: dto.IssuerGetDTO) -> GetResult | None:
         return await self.client.get_issuer(**payload)
 
     async def apply(self, payload: dto.IssuerApplyDTO) -> abstract.ApplyResult:

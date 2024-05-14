@@ -1,39 +1,84 @@
 import abc
+from collections.abc import Iterable, Iterator
 import logging
 from dataclasses import dataclass, field
 from typing import (
     Callable,
     Generic,
-    Iterable,
-    Iterator,
     Literal,
     NoReturn,
     TypedDict,
     TypeVar,
-    Union,
 )
+from typing_extensions import override
 
-import networkx as nx
+from networkx import DiGraph, set_node_attributes
 
 T = TypeVar("T")
 P = TypeVar("P")
-EdgeStatusType = Literal["unsatisfied", "in_process", "satisfied"]
+
+DependencyStatus = Literal[
+    # The dependency is not satisfied yet.
+    "pending",
+    # The dependency is in the process of being satisfied.
+    "in_progress",
+    # The dependency is satisfied.
+    "satisfied",
+]
+"""Represents the status of a dependency in a dependency graph."""
 
 logger = logging.getLogger(__name__)
 default_obj = object()
 
 
+@dataclass(slots=True)
 class AbstractNode:
+    @override
     @abc.abstractmethod
     def __hash__(self) -> int:
         """
-        The hash serves as a unique identifier for the node, enabling the manager to
-        differentiate between multiple nodes and order their dependencies correctly.
+        The hash serves as a unique identifier for the node, enabling the dependency
+        chain differentiate between multiple nodes and order their dependencies
+        correctly.
         """
 
 
+@dataclass(slots=True)
+class FallbackNode(AbstractNode):
+    """
+    Efficiently represents a :class:`Node` object before its payload is available.
+
+    When working with large datasets, it's often necessary to establish relationships
+    between nodes before their payloads are fully loaded. This class allows you to
+    create a fallback node that can be used for ordering dependencies without having
+    to wait for the full node information.
+
+    Once a `FallbackNode` has been created, it can be used in place of a regular
+    `Node` object.
+
+    Example:
+        >>> @dataclass
+        ... class Node(AbstractNode):
+        ...    uid: int
+        ...    payload: Any
+        ...
+        ...   @override
+        ...   def __hash__(self) -> int:
+        ...       return hash(self.uid)
+        ...
+        ... uid = 123
+        ... assert hash(FallbackNode(uid)) == hash(Node(uid=uid, payload="foo"))
+    """
+
+    node_hash: int
+
+    @override
+    def __hash__(self) -> int:
+        return self.node_hash
+
+
 class _EdgeAttrs(TypedDict):
-    status: EdgeStatusType
+    status: DependencyStatus
 
 
 @dataclass(slots=True)
@@ -47,31 +92,25 @@ class DependencyChain(Generic[T]):
     where certain objects must be processed before others.
     """
 
-    _graph: nx.DiGraph = field(init=False, default_factory=nx.DiGraph)
+    _graph: DiGraph[int] = field(init=False, default_factory=DiGraph)
 
     @staticmethod
     def _raise_edge_not_found_exc(u: int, v: int) -> NoReturn:
         raise ValueError("Edge not found (u: %r, v: %r)" % (hash(u), hash(v)))
 
     @staticmethod
-    def _edge_is_unsatisfied(edge: tuple[int, int, _EdgeAttrs]) -> bool:
-        return edge[2]["status"] == "unsatisfied"
+    def _is_pending(edge: tuple[int, int, _EdgeAttrs]) -> bool:
+        return edge[2]["status"] == "pending"
 
-    @classmethod
-    def _edge_is_unsatisfied_with_exclude(
-        cls,
-        edge: tuple[int, int, _EdgeAttrs],
-        exclude: Callable[[tuple[int, int]], bool],
-    ) -> bool:
-        if exclude(edge[:2]):
-            return False
-        return cls._edge_is_unsatisfied(edge)
+    @staticmethod
+    def _is_satisfied(edge: tuple[int, int, _EdgeAttrs]) -> bool:
+        return edge[2]["status"] == "satisfied"
 
     def _get_edge_data(self, u: int, v: int) -> _EdgeAttrs:
-        return self._graph[u][v]  # type: ignore[no-any-return]
+        return self._graph[u][v]  # pyright: ignore[reportReturnType]
 
     def _get_node_payload(self, node_hash: int) -> T:
-        return self._graph.nodes[node_hash]["payload"]  # type: ignore[no-any-return]
+        return self._graph.nodes[node_hash]["payload"]  # pyright: ignore[reportReturnType]
 
     def add_node(self, node: T) -> int:
         node_hash = hash(node)
@@ -80,13 +119,13 @@ class DependencyChain(Generic[T]):
         logger.debug("added node %r with payload %r", node_hash, node)
         return node_hash
 
-    def get_node_by_hash(self, value: int, default: P) -> Union[T, P]:
+    def get_node_by_hash(self, value: int, default: P) -> T | P:
         if self._graph.nodes.get(value, default=None) is None:
             return default
         return self._get_node_payload(value)
 
     def remove_nodes(self, nodes: Iterable[T]) -> None:
-        self._graph.remove_nodes_from(nodes)
+        self._graph.remove_nodes_from(hash(n) for n in nodes)
 
     def relabel_nodes(self, pairs: Iterable[tuple[T, T]]) -> None:
         """
@@ -99,7 +138,7 @@ class DependencyChain(Generic[T]):
             >>> print(mgr._graph.nodes)
             {"X", "Y", "Z"}
         """
-        nx.set_node_attributes(
+        set_node_attributes(
             self._graph,
             {
                 node_hash: {"payload": node}
@@ -111,7 +150,7 @@ class DependencyChain(Generic[T]):
         self,
         u: T,
         v: T,
-        status: EdgeStatusType = "unsatisfied",
+        status: DependencyStatus = "pending",
     ) -> None:
         """
         Adds an edge from u to v, indicating that v depends on u.
@@ -121,19 +160,19 @@ class DependencyChain(Generic[T]):
         logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
 
     def has_node(self, node: T) -> bool:
-        return self._graph.has_node(node)  # type: ignore[no-any-return]
+        return self._graph.has_node(hash(node))
 
     def has_edge(self, u: T, v: T) -> bool:
-        return self._graph.has_edge(hash(u), hash(v))  # type: ignore[no-any-return]
+        return self._graph.has_edge(hash(u), hash(v))
 
-    def update_edge_status(self, u: T, v: T, status: EdgeStatusType) -> None:
+    def update_edge_status(self, u: T, v: T, status: DependencyStatus) -> None:
         u_hash, v_hash = hash(u), hash(v)
         try:
-            self._graph[u_hash][v_hash]["status"] = status
+            self._graph[u_hash][v_hash]["status"] = status  # pyright: ignore[reportArgumentType]
         except IndexError:
             self._raise_edge_not_found_exc(u_hash, v_hash)
 
-    def get_edge_status(self, u: T, v: T) -> EdgeStatusType:
+    def get_edge_status(self, u: T, v: T) -> DependencyStatus:
         u_hash, v_hash = hash(u), hash(v)
         try:
             data = self._get_edge_data(u_hash, v_hash)
@@ -146,65 +185,78 @@ class DependencyChain(Generic[T]):
         node: T,
         default: P,
         exclude: Callable[[tuple[int, int]], bool] = lambda _: False,
-    ) -> Union[bool, P]:
+    ) -> bool | P:
         """
-        Returns True if all inbound edges to the given node are satisfied, False
-        otherwise.
+        Checks if all inbound edges of a given node have their status satisfied.
 
         If the node has no inbound edges, returns the default value.
 
         Args:
             default: The value to return if the node has no inbound edges.
-            exclude: A callable function that takes a tuple of two nodes and returns
-                True if the edge between them should be excluded from the
-                satisfaction check, False otherwise. Defaults to None,
-                which means all edges are included.
+            exclude: A callable that takes a tuple of adjacent nodes (representing a
+                     dependency) and returns a boolean. If True, the edge will be
+                     excluded from the check.
+
+        Returns:
+            True if all inbound edges are satisfied, False otherwise. If the node has
+            no inbound edges, returns the default value.
+
         """
-        unsatisfied_edge = next(
-            filter(
-                lambda edge: self._edge_is_unsatisfied_with_exclude(
-                    edge, exclude  # pyright: ignore[reportGeneralTypeIssues]
-                ),
-                self._graph.in_edges(hash(node), data=True),
-            ),
-            default_obj,
-        )
-
-        if id(unsatisfied_edge) == id(default_obj):
-            return default
-
-        return not unsatisfied_edge
-
-    def filter_nodes_for_satisfaction(self, node: T) -> Iterator[T]:
-        """
-        Yields nodes that have all their inbound edges satisfied, except for one inbound
-        edge that comes from the specified node.
-        """
-        node_hash = hash(node)
-
         return (
-            self._get_node_payload(nbr)
-            for nbr in self._graph.neighbors(node_hash)
-            if self.are_inbound_edges_satisfied(
-                self._graph.nodes[nbr]["payload"],
-                exclude=lambda edge: edge[0] == node_hash,
-                default=True,
+            next(
+                filter(
+                    lambda edge: exclude(edge[:2])
+                    and False
+                    or not self._is_satisfied(edge),  # pyright: ignore[reportArgumentType]
+                    self._graph.in_edges(hash(node), data=True),
+                ),
+                default_obj,
             )
+            == id(default_obj)
+            and default
         )
 
-    def find_all_unsatisfied_edges(self) -> Iterator[tuple[T, T]]:
+    def filter_upstreams(self, node: T, function: Callable[[T], bool]) -> Iterator[T]:
         """
-        Yields all edges in the graph that have unsatisfied status.
+        Filters the upstreams of a given node based on a provided function.
+
+        Args:
+            node: The node to filter upstreams for.
+            function: A function that takes a node payload as input and returns a boolean value.
+
+        Returns:
+            An iterator of node payloads that satisfy the provided function.
+        """
+        for nbr in self._graph.predecessors(hash(node)):
+            if function((payload := self._get_node_payload(nbr))):
+                yield payload
+
+    def filter_downstreams(self, node: T, function: Callable[[T], bool]) -> Iterator[T]:
+        """
+        Filters the downstreams of a given node based on a provided function.
+
+        Args:
+            node: The node to filter downstreams for.
+            function: A function that takes a node payload as input and returns a boolean value.
+
+        Returns:
+            An iterator of node payloads that satisfy the provided function.
+        """
+        for nbr in self._graph.successors(hash(node)):
+            if function((payload := self._get_node_payload(nbr))):
+                yield payload
+
+    def get_pending_edges(self) -> Iterator[tuple[T, T]]:
+        """
+        Yields any edges in the graph that have ``pending`` status.
         """
         return map(
             lambda edge: (
                 self._get_node_payload(edge[0]),
                 self._get_node_payload(edge[1]),
             ),
-            filter(
-                lambda edge: self._edge_is_unsatisfied(
-                    edge  # pyright: ignore[reportGeneralTypeIssues]
-                ),
-                self._graph.in_edges(data=True, default={}),
+            filter(  # pyright: ignore[reportCallIssue]
+                lambda edge: self._is_pending(edge),  # pyright: ignore[reportArgumentType]
+                self._graph.in_edges(data=True, default={}),  # pyright: ignore[reportArgumentType, reportCallIssue]
             ),
         )

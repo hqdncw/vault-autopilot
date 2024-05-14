@@ -1,13 +1,38 @@
 import asyncio
 import logging
 from dataclasses import InitVar, dataclass, field
-from typing import Annotated, AsyncIterator
+from typing import Annotated, TYPE_CHECKING
+from collections.abc import AsyncIterator
 
 import annotated_types
+from ironfence import Mutex
 
-from .. import dto, parser, processor, state, util
+from vault_autopilot.util.dependency_chain import DependencyChain
+
+from ..util.coro import (
+    BoundlessSemaphore,
+    create_task_limited,
+)
+
+from .. import dto
+from ..service import (
+    PasswordPolicyService,
+    IssuerService,
+    PasswordService,
+    PKIRoleService,
+)
+from ..processor import (
+    AbstractProcessor,
+    PKIRoleApplyProcessor,
+    IssuerApplyProcessor,
+    PasswordPolicyApplyProcessor,
+    PasswordApplyProcessor,
+)
 from .._pkg import asyva
 from . import event
+
+if TYPE_CHECKING:
+    from ..parser import QueueType
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +44,13 @@ class Dispatcher:
     """
     Dispatches DTOs to the relevant processors.
 
-    Args:
-        queue: The queue containing DTOs to be processed.
+    Attributes:
+        queue: The queue containing DTOs to be dispatched.
         max_dispatch: The maximum number of DTOs that can be dispatched and processed
             concurrently. Defaults to ``0``, which means no limit is set.
     """
 
-    queue: "parser.QueueType"
+    queue: "QueueType"
     client: InitVar[asyva.client.Client]
     max_dispatch: InitVar[MaxDispatchType] = 0
 
@@ -33,6 +58,10 @@ class Dispatcher:
     _observer: event.EventObserver[event.EventType] = field(
         init=False, default_factory=event.EventObserver
     )
+    _is_concurrency_enabled: bool = field(init=False)
+    _payload_proc_map: dict[  # pyright: ignore[reportRedeclaration]
+        str, AbstractProcessor
+    ] = field(init=False)
 
     def __post_init__(
         self, client: asyva.Client, max_dispatch: MaxDispatchType
@@ -40,32 +69,47 @@ class Dispatcher:
         self._sem = (
             asyncio.BoundedSemaphore(max_dispatch)
             if max_dispatch > 0
-            else util.coro.BoundlessSemaphore()
+            else BoundlessSemaphore()
         )
         self._is_concurrency_enabled = max_dispatch != 1
 
+        # TODO: Allow processors to share the same dependency chain to reduce memory
+        #  consumption.
+
         # Initialize processors
-        self._payload_proc_map: dict[str, processor.AbstractProcessor] = {
-            "Password": processor.PasswordApplyProcessor(
-                state.PasswordState(self._sem, client, observer=self._observer)
+        self._payload_proc_map: dict[str, AbstractProcessor] = {
+            "Password": PasswordApplyProcessor(
+                sem=self._sem,
+                client=client,
+                observer=self._observer,
+                dep_chain=Mutex(DependencyChain()),
+                pwd_svc=PasswordService(client),
             ),
-            "Issuer": processor.IssuerApplyProcessor(
-                state.IssuerState(self._sem, client, observer=self._observer)
+            "Issuer": IssuerApplyProcessor(
+                sem=self._sem,
+                client=client,
+                observer=self._observer,
+                dep_chain=Mutex(DependencyChain()),
+                iss_svc=IssuerService(client),
             ),
-            "PasswordPolicy": processor.PasswordPolicyApplyProcessor(
-                state.PasswordPolicyState(client, self._sem, observer=self._observer)
+            "PasswordPolicy": PasswordPolicyApplyProcessor(
+                sem=self._sem,
+                client=client,
+                observer=self._observer,
+                pwd_policy_svc=PasswordPolicyService(client),
             ),
-            "PKIRole": processor.PKIRoleApplyProcessor(
-                state.PKIRoleState(
-                    sem=self._sem, client=client, observer=self._observer
-                )
+            "PKIRole": PKIRoleApplyProcessor(
+                sem=self._sem,
+                client=client,
+                observer=self._observer,
+                dep_chain=Mutex(DependencyChain()),
+                pki_role_svc=PKIRoleService(client),
             ),
         }
 
-        # Register the handlers with the Processor objects, allowing them to handle
-        # events triggered by the Dispatcher
+        # Enable the processors to handle events triggered by the Dispatcher
         for proc in self._payload_proc_map.values():
-            proc.register_handlers()
+            proc.initialize()
 
     async def dispatch(self) -> None:
         async with asyncio.TaskGroup() as tg:
@@ -76,7 +120,7 @@ class Dispatcher:
                 # If concurrency is enabled, create a new task limited by the semaphore
                 # otherwise, just wait for the coroutine to finish
                 if self._is_concurrency_enabled:
-                    await util.coro.create_task_limited(tg, self._sem, coro)
+                    await create_task_limited(tg, self._sem, coro)
                 else:
                     await coro
 
@@ -90,7 +134,7 @@ class Dispatcher:
     async def _queue_iter(self) -> AsyncIterator[dto.DTO]:
         while True:
             item = await self.queue.get()
-            if isinstance(item, parser.EndByte):
+            if item is None:
                 break
             yield item
 

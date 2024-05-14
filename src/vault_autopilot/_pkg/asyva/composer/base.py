@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Iterable
 
 import aiohttp
 
@@ -9,48 +9,44 @@ HeadersContainer = dict[str, str]
 @dataclass
 class BaseComposer:
     """
-    This class is a helpful tool for streamlining the process of creating HTTP sessions
-    with HashiCorp Vault. It makes it easier to construct HTTP requests to Vault by
-    taking care of the required headers, such as the `X-Vault-Request` header, so you
-    don't have to worry about them.
+    A base class for creating aiohttp ClientSession objects with default
+    headers.
 
-    Args:
-        base_url: The base URL of the Vault server.
-        skip_auto_headers:
-            A list of header names that will be skipped when autogenerating the request
-            headers.
-
-    Note:
-        You can provide a custom `headers` dictionary to the `create()` method to
-        include additional headers in the request.
+    Attributes:
+        base_url (str): The base URL for the aiohttp ClientSession.
+        skip_auto_headers (Iterator[str]): An iterable of header names to skip when
+            creating the ClientSession.
     """
 
     base_url: str
-    skip_auto_headers = (
+    skip_auto_headers: Iterable[str] = (
         # https://developer.hashicorp.com/vault/api-docs#api-operations
         "Content-Type",
     )
 
-    def compose_default_headers(self, data: HeadersContainer) -> HeadersContainer:
-        """Composes the default headers for a Vault request."""
-        # add the X-Vault-Request header to all requests to protect against SSRF
-        # vulnerabilities.
-        # https://developer.hashicorp.com/vault/api-docs#the-x-vault-request-header
-        data.update({"X-Vault-Request": "true"})
-        return data
+    def compose_default_headers(self) -> HeadersContainer:
+        """
+        Composes default headers for the aiohttp ClientSession.
+
+        Returns:
+            Dict[str, str]: A dictionary of headers.
+        """
+        return {
+            # add the X-Vault-Request header to all requests to protect against SSRF
+            # vulnerabilities.
+            # https://developer.hashicorp.com/vault/api-docs#the-x-vault-request-header
+            "X-Vault-Request": "true"
+        }
 
     def create(
-        self, headers: Optional[HeadersContainer] = None, **kwargs: Any
+        self, headers: HeadersContainer | None = None, **kwargs: Any
     ) -> aiohttp.ClientSession:
-        """Creates a new `aiohttp.ClientSession` instance configured for Vault
-        requests."""
-        headers, default_headers = headers or {}, self.compose_default_headers({})
-        assert not (
-            inter := any(x in default_headers.keys() for x in headers.keys())
-        ), ("You aren't allowed to override default headers!\n%r" % inter)
+        """Creates an aiohttp ClientSession."""
+        headers = headers or {}
+
         return aiohttp.ClientSession(
             base_url=self.base_url,
-            headers={**headers, **default_headers},
-            skip_auto_headers=self.skip_auto_headers.__iter__(),
+            headers=self.compose_default_headers().update(headers),
+            skip_auto_headers=self.skip_auto_headers,
             **kwargs,
         )

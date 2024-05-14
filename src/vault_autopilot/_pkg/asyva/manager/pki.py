@@ -1,9 +1,9 @@
 import http
 import logging
-from typing import Any, NoReturn, NotRequired, Optional
+from typing import Any, NoReturn, NotRequired
 
 import pydantic
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, override
 
 from .... import util
 from .. import constants, dto, exc
@@ -89,8 +89,9 @@ class UpdateResult(base.AbstractResult):
 
     data: Data
 
+    @override
     @classmethod
-    def from_response(cls, data: dict[str, Any]) -> "UpdateResult":
+    def from_response(cls, data: dict[Any, Any]) -> "UpdateResult":
         data["data"]["usage"] = data["data"]["usage"].split(",")
         return cls.model_construct(**data)
 
@@ -104,8 +105,8 @@ class GetResult(base.AbstractResult):
 
 def raise_issuer_name_taken_exc(issuer_name: str, mount_path: str) -> NoReturn:
     raise exc.IssuerNameTakenError(
-        "Issuer name {issuer_name!r} (secret_engine: {secret_engine!r}) is "
-        "already in use. Please choose a different name",
+        "Issuer name {issuer_name!r} (secret_engine: {secret_engine!r}) is \
+        already in use. Please choose a different name",
         ctx=exc.IssuerNameTakenError.Context(
             issuer_name=issuer_name,
             secret_engine=mount_path,
@@ -266,7 +267,7 @@ class PKIManager(base.BaseManager):
             "Failed to create/update pki role", await resp.json()
         )
 
-    async def get_issuer(self, payload: dto.IssuerGetDTO) -> Optional[GetResult]:
+    async def get_issuer(self, payload: dto.IssuerGetDTO) -> GetResult | None:
         async with self.new_session() as sess:
             resp = await sess.get(
                 "/v1/%s/issuer/%s" % (payload["mount_path"], payload["issuer_ref"])

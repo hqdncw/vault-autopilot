@@ -2,23 +2,27 @@ import asyncio
 import logging
 import pathlib
 from dataclasses import dataclass
-from typing import IO, Any, Iterator, Type, Union
+from typing import IO
+from collections.abc import Generator, Iterator
+from typing import Any
 
 import pydantic
 import pydantic.alias_generators
 import ruamel.yaml as yaml
 from ruamel.yaml.error import YAMLError
 
-from . import dto, exc, util
+from .exc import ManifestSyntaxError
 
-__all__ = ("QueueType", "EndByte", "ManifestParser")
+from . import dto, util
+
+__all__ = ("QueueType", "ManifestParser")
 
 
-QueueType = asyncio.Queue[Union[dto.DTO, "EndByte"]]
+QueueType = asyncio.Queue[dto.DTO | None]
 
 logger = logging.getLogger(__name__)
 
-KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
+KIND_SCHEMA_MAP: dict[str, type[dto.DTO]] = {
     "Password": dto.PasswordApplyDTO,
     "Issuer": dto.IssuerApplyDTO,
     "PasswordPolicy": dto.PasswordPolicyApplyDTO,
@@ -26,10 +30,6 @@ KIND_SCHEMA_MAP: dict[str, Type[dto.DTO]] = {
 }
 
 loader = yaml.YAML(typ="rt")
-
-
-class EndByte:
-    """Indicates that the parser has finished parsing."""
 
 
 @dataclass(slots=True)
@@ -49,7 +49,7 @@ class ManifestParser:
     async def execute(self) -> "QueueType":
         logger.debug("parsing files")
 
-        def stream_documents(buf: IO[bytes]) -> Any:
+        def stream_documents(buf: IO[bytes]) -> Generator[Any, Any, Any]:
             return (obj for obj in loader.load_all(buf))
 
         for buf in self.manifest_iterator:
@@ -59,20 +59,22 @@ class ManifestParser:
                 try:
                     payload = next(iter_)
                 except YAMLError as ex:
-                    raise exc.ManifestSyntaxError(
+                    raise ManifestSyntaxError(
                         str(ex),
-                        exc.ManifestSyntaxError.Context(filename=pathlib.Path(fn)),
+                        ManifestSyntaxError.Context(loc={"filename": pathlib.Path(fn)}),
                     ) from ex
                 except StopIteration:
                     break
                 else:
-                    ctx = exc.ManifestValidationError.Context(filename=pathlib.Path(fn))
+                    ctx = ManifestSyntaxError.Context(
+                        loc={"filename": pathlib.Path(fn)}
+                    )
 
                     if (
                         not isinstance(payload, dict)
                         or (kind := payload.get("kind")) is None
                     ):
-                        raise exc.ManifestValidationError(
+                        raise ManifestSyntaxError(
                             "Mapping 'kind' is missing in %r" % payload,
                             ctx,
                         )
@@ -80,7 +82,7 @@ class ManifestParser:
                     if kind in KIND_SCHEMA_MAP.keys():
                         schema = KIND_SCHEMA_MAP[kind]
                     else:
-                        raise exc.ManifestValidationError(
+                        raise ManifestSyntaxError(
                             "Unsupported kind %r. Supported object kinds include: %s"
                             % (kind, tuple(KIND_SCHEMA_MAP.keys())),
                             ctx,
@@ -89,7 +91,7 @@ class ManifestParser:
                     try:
                         payload = schema.model_validate(payload)
                     except pydantic.ValidationError as ex:
-                        raise exc.ManifestValidationError(
+                        raise ManifestSyntaxError(
                             str(util.model.convert_errors(ex)), ctx
                         )
 
@@ -97,6 +99,6 @@ class ManifestParser:
                     await self.queue.put(payload)
 
         logger.debug("parsed files successfully")
-        await self.queue.put(EndByte())
+        await self.queue.put(None)
 
         return self.queue

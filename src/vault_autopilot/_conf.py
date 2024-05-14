@@ -1,4 +1,4 @@
-from typing import Literal, Union
+from typing import Literal
 
 import pydantic.alias_generators
 from pydantic.dataclasses import dataclass
@@ -23,7 +23,7 @@ class TokenAuthMethod(asyva.TokenAuthenticator):
 @dataclass(slots=True, config=_config)
 class Settings:
     base_url: str
-    auth: Union[KubernetesAuthMethod, TokenAuthMethod] = pydantic.Field(
+    auth: KubernetesAuthMethod | TokenAuthMethod = pydantic.Field(
         discriminator="method"
     )
     default_namespace: str = ""

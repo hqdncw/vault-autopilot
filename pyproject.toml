@@ -29,10 +29,10 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "pydantic~=2.4.2",
-  "aiohttp~=3.8.5",
+  "pydantic~=2.7.1",
+  "aiohttp~=3.9.5",
   "lazy-object-proxy~=1.9.0",
-  "networkx~=3.2.1",
+  "networkx~=3.3.0",
   "ironfence~=0.1.0",
   "humanize~=4.9.0",
   # TODO: temporary dependencies
@@ -46,17 +46,17 @@ Repository = "https://github.com/hqdncw/vault-autopilot"
 [project.optional-dependencies]
 cli = [
   "click~=8.1.7",
-  "ruamel.yaml~=0.18.5"
+  "ruamel.yaml~=0.18.5",
+  "rich~=13.7.1"
 ]
 # colorlog = [
 #   "colorlog~=6.8.0"
 # ]
 dev = [
-  "black~=23.12.1",
-  "isort~=5.13.2",
-  "ruff~=0.1.14",
-  "mypy~=1.8.0",
-  "pre-commit~=3.4.0"
+  "basedpyright~=1.10.4",
+  "ruff~=0.4.2",
+  "mypy~=1.10.0",
+  "pre-commit~=3.7.0"
 ]
 
 [tool.black]
@@ -75,12 +75,9 @@ exclude = '''
 line-length = 88
 target-version = "py311"
 
-[tool.isort]
-# https://black.readthedocs.io/en/stable/guides/using_black_with_other_tools.html#isort
-profile = "black"
-
 [tool.mypy]
 python_version = "3.11"
+python_executable = "./.venv/bin/python"
 show_error_codes = true
 show_error_context = true
 pretty = true
@@ -96,22 +93,25 @@ disallow_untyped_decorators = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
-warn_return_any = true
 follow_imports_for_stubs = true
 namespace_packages = true
 show_absolute_path = true
-enable_incomplete_feature = ["Unpack"]
 plugins = [
   "pydantic.mypy"
 ]
 
 [[tool.mypy.overrides]]
 module = [
-  "lazy_object_proxy.*",
-  "networkx.*",
+  "lazy_object_proxy",
+  "networkx",
   "ruamel"
 ]
 ignore_missing_imports = true
+
+[tool.basedpyright]
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
 
 [tool.semantic_release]
 build_command = """

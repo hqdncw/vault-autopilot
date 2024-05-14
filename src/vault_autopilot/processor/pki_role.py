@@ -1,12 +1,15 @@
 import logging
 from dataclasses import dataclass
-from typing import Iterable, Union
+from collections.abc import Iterable
+from typing_extensions import override
 
-from .. import dto, state
+
+from .. import dto
 from ..dispatcher import event
+from ..service import PKIRoleService
 from ..util.dependency_chain import AbstractNode
 from .abstract import ChainBasedProcessor
-from .issuer import PlaceholderNode as IssuerNode
+from .issuer import IssuerFallbackNode
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,7 @@ logger = logging.getLogger(__name__)
 class PKIRoleNode(AbstractNode):
     payload: dto.PKIRoleApplyDTO
 
+    @override
     def __hash__(self) -> int:
         return hash(self.payload.absolute_path())
 
@@ -35,65 +39,72 @@ class PKIRoleNode(AbstractNode):
         return cls(payload)
 
 
-@dataclass(slots=True)
-class PKIRolePlaceholderNode(AbstractNode):
-    node_hash: int
+# @dataclass(slots=True)
+# class PKIRoleFallbackNode(AbstractNode):
+#     node_hash: int
+#
+#     @override
+#     def __hash__(self) -> int:
+#         return self.node_hash
+#
+#     @classmethod
+#     def from_pki_role_absolute_path(cls, path: str) -> "PKIRoleFallbackNode":
+#         """
+#         Creates a new :class:`PKIRoleFallbackNode` instance from a PKI Role absolute
+#         path.
+#
+#         Args:
+#             path: The path must be in the format ``pki/my-role`` where ``pki`` is the
+#                 PKI engine mount path and ``my-role`` is the name of the role.
+#         """
+#         return cls(hash(path))
 
-    def __hash__(self) -> int:
-        return self.node_hash
 
-    @classmethod
-    def from_pki_role_absolute_path(cls, path: str) -> "PKIRolePlaceholderNode":
-        """
-        Creates a new :class:`PKIRolePlaceholderNode` instance from a PKI Role absolute
-        path.
-
-        Args:
-            path: The path must be in the format ``pki/my-role`` where ``pki`` is the
-                PKI engine mount path and ``my-role`` is the name of the role.
-        """
-        return cls(hash(path))
-
-
-NodeType = Union[PKIRoleNode, IssuerNode]
+NodeType = PKIRoleNode | IssuerFallbackNode
 
 
 @dataclass(slots=True)
 class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
-    state: state.PKIRoleState
+    pki_role_svc: PKIRoleService
 
-    async def build_upstreams(self, node: NodeType) -> Iterable[NodeType]:
+    @override
+    async def _build_fallback_upstream_nodes(
+        self, node: NodeType
+    ) -> Iterable[NodeType]:
         assert isinstance(node, PKIRoleNode)
 
         return (
-            IssuerNode.from_issuer_absolute_path(
+            IssuerFallbackNode.from_issuer_absolute_path(
                 node.payload.issuer_ref_absolute_path()
             ),
         )
 
-    def register_handlers(self) -> None:
+    @override
+    def initialize(self) -> None:
         async def _on_pki_role_apply_requested(ev: event.PKIRoleApplyRequested) -> None:
-            await self._schedule(PKIRoleNode.from_payload(ev.resource))
+            await self.schedule(PKIRoleNode.from_payload(ev.resource))
 
         async def _on_issuer_processed(ev: event.IssuerApplySuccess) -> None:
-            async with self.state.dep_chain.lock() as mgr:
-                issuer_node = IssuerNode.from_issuer_absolute_path(
+            async with self.dep_chain.lock() as mgr:
+                issuer_node = IssuerFallbackNode.from_issuer_absolute_path(
                     ev.resource.absolute_path()
                 )
                 if not mgr.has_node(issuer_node):
-                    mgr.add_node(issuer_node)
+                    _ = mgr.add_node(issuer_node)
 
-            await self.satisfy_outbound_edges_for(
-                IssuerNode.from_issuer_absolute_path(ev.resource.absolute_path())
+            await self.flush_pending_downstreams_for(
+                IssuerFallbackNode.from_issuer_absolute_path(
+                    ev.resource.absolute_path()
+                )
             )
 
         async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
-            await self.satisfy_any_downstreams()
+            await self.flush_any_pending_downstreams()
 
-        self.state.observer.register(
+        self.observer.register(
             (event.PKIRoleApplyRequested,), _on_pki_role_apply_requested
         )
-        self.state.observer.register(
+        self.observer.register(
             (
                 event.IssuerVerifySuccess,
                 event.IssuerUpdateSuccess,
@@ -101,24 +112,21 @@ class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
             ),
             _on_issuer_processed,
         )
-        self.state.observer.register(
-            (event.PostProcessRequested,), _on_postprocess_requested
-        )
+        self.observer.register((event.PostProcessRequested,), _on_postprocess_requested)
 
-    async def _process(self, node: NodeType) -> None:
+    @override
+    async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, PKIRoleNode)
 
-        await self.state.observer.trigger(event.PKIRoleApplyStarted(node.payload))
+        await self.observer.trigger(event.PKIRoleApplyStarted(node.payload))
 
         # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
         try:
-            await self.state.pki_role_svc.update_or_create(node.payload)
+            await self.pki_role_svc.update_or_create(node.payload)
         except Exception:
-            await self.state.observer.trigger(event.PKIRoleCreateError(node.payload))
+            await self.observer.trigger(event.PKIRoleCreateError(node.payload))
             raise
 
-        await self.state.observer.trigger(event.PKIRoleCreateSuccess(node.payload))
+        await self.observer.trigger(event.PKIRoleCreateSuccess(node.payload))
 
-        logger.debug(
-            "pki role resource applying finished: %r", node.payload.absolute_path()
-        )
+        logger.debug("applying finished %r", node.payload.absolute_path())

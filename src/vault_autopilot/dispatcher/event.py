@@ -1,12 +1,15 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Generic, Sequence, Type, TypeVar, Union
+from typing import Any, Callable, Generic, TypeVar
+from collections.abc import Sequence, Coroutine
+
+from ..util.coro import create_task_limited
 
 from .. import dto, util
 
 T = TypeVar("T")
 
-FilterType = Sequence[Type[T]]
+FilterType = Sequence[type[T]]
 CallbackType = Callable[[Any], Coroutine[Any, Any, Any]]
 
 
@@ -35,7 +38,7 @@ class EventObserver(Generic[T]):
     async def trigger(self, event: T) -> None:
         async with asyncio.TaskGroup() as tg:
             for handler in filter(lambda h: type(event) in h.filter, self._handlers):
-                await util.coro.create_task_limited(
+                await create_task_limited(
                     tg, util.coro.BoundlessSemaphore(), handler.callback(event)
                 )
 
@@ -210,127 +213,116 @@ class PostProcessRequested:
     """
 
 
-ResourceApplyRequested = Union[
-    PasswordApplyRequested,
-    IssuerApplyRequested,
-    PasswordPolicyApplyRequested,
-    PKIRoleApplyRequested,
-]
-ResourceApplyStarted = Union[
-    PasswordApplyStarted,
-    IssuerApplyStarted,
-    PasswordPolicyApplyStarted,
-    PKIRoleApplyStarted,
-]
-ResourceCreateError = Union[
-    PasswordCreateError,
-    IssuerCreateError,
-    PKIRoleCreateError,
-    PasswordPolicyCreateError,
-]
-ResourceUpdateError = Union[
-    PasswordUpdateError,
-    IssuerUpdateError,
-    PKIRoleUpdateError,
-    PasswordPolicyUpdateError,
-]
-ResourceCreateSuccess = Union[
-    PasswordCreateSuccess,
-    IssuerCreateSuccess,
-    PasswordPolicyCreateSuccess,
-    PKIRoleCreateSuccess,
-]
-ResourceUpdateSuccess = Union[
-    PasswordUpdateSuccess,
-    IssuerUpdateSuccess,
-    PasswordPolicyUpdateSuccess,
-    PKIRoleUpdateSuccess,
-]
-ResourceVerifySuccess = Union[
-    PasswordVerifySuccess,
-    IssuerVerifySuccess,
-    PasswordPolicyVerifySuccess,
-    PKIRoleVerifySuccess,
-]
-ResourceVerifyError = Union[
-    PasswordVerifyError,
-    IssuerVerifyError,
-    PasswordPolicyVerifyError,
-    PKIRoleVerifyError,
-]
+ResourceApplyRequested = (
+    PasswordApplyRequested
+    | IssuerApplyRequested
+    | PasswordPolicyApplyRequested
+    | PKIRoleApplyRequested
+)
+ResourceApplyStarted = (
+    PasswordApplyStarted
+    | IssuerApplyStarted
+    | PasswordPolicyApplyStarted
+    | PKIRoleApplyStarted
+)
+ResourceCreateError = (
+    PasswordCreateError
+    | IssuerCreateError
+    | PKIRoleCreateError
+    | PasswordPolicyCreateError
+)
+ResourceUpdateError = (
+    PasswordUpdateError
+    | IssuerUpdateError
+    | PKIRoleUpdateError
+    | PasswordPolicyUpdateError
+)
+ResourceCreateSuccess = (
+    PasswordCreateSuccess
+    | IssuerCreateSuccess
+    | PasswordPolicyCreateSuccess
+    | PKIRoleCreateSuccess
+)
+ResourceUpdateSuccess = (
+    PasswordUpdateSuccess
+    | IssuerUpdateSuccess
+    | PasswordPolicyUpdateSuccess
+    | PKIRoleUpdateSuccess
+)
+ResourceVerifySuccess = (
+    PasswordVerifySuccess
+    | IssuerVerifySuccess
+    | PasswordPolicyVerifySuccess
+    | PKIRoleVerifySuccess
+)
+ResourceVerifyError = (
+    PasswordVerifyError
+    | IssuerVerifyError
+    | PasswordPolicyVerifyError
+    | PKIRoleVerifyError
+)
 
-IssuerApplySuccess = Union[
-    IssuerCreateSuccess, IssuerUpdateSuccess, IssuerVerifySuccess
-]
-PasswordApplySuccess = Union[
-    PasswordCreateSuccess, PasswordUpdateSuccess, PasswordVerifySuccess
-]
-PasswordPolicyApplySuccess = Union[
-    PasswordPolicyCreateSuccess,
-    PasswordPolicyUpdateSuccess,
-    PasswordPolicyVerifySuccess,
-]
-PKIRoleApplySuccess = Union[
-    PKIRoleCreateSuccess, PKIRoleUpdateSuccess, PKIRoleVerifySuccess
-]
-ResourceApplySuccess = Union[
-    PasswordApplySuccess,
-    IssuerApplySuccess,
-    PasswordPolicyApplySuccess,
-    PKIRoleApplySuccess,
-]
+IssuerApplySuccess = IssuerCreateSuccess | IssuerUpdateSuccess | IssuerVerifySuccess
+PasswordApplySuccess = (
+    PasswordCreateSuccess | PasswordUpdateSuccess | PasswordVerifySuccess
+)
+PasswordPolicyApplySuccess = (
+    PasswordPolicyCreateSuccess
+    | PasswordPolicyUpdateSuccess
+    | PasswordPolicyVerifySuccess
+)
+PKIRoleApplySuccess = PKIRoleCreateSuccess | PKIRoleUpdateSuccess | PKIRoleVerifySuccess
+ResourceApplySuccess = (
+    PasswordApplySuccess
+    | IssuerApplySuccess
+    | PasswordPolicyApplySuccess
+    | PKIRoleApplySuccess
+)
 
-IssuerApplyError = Union[IssuerCreateError, IssuerUpdateError, IssuerVerifyError]
-PasswordApplyError = Union[
-    PasswordCreateError, PasswordUpdateError, PasswordVerifyError
-]
-PasswordPolicyApplyError = Union[
-    PasswordPolicyCreateError,
-    PasswordPolicyUpdateError,
-    PasswordPolicyVerifyError,
-]
-PKIRoleApplyError = Union[PKIRoleCreateError, PKIRoleUpdateError, PKIRoleVerifyError]
-ResourceApplyError = Union[
-    PasswordApplyError,
-    IssuerApplyError,
-    PasswordPolicyApplyError,
-    PKIRoleApplyError,
-]
+IssuerApplyError = IssuerCreateError | IssuerUpdateError | IssuerVerifyError
+PasswordApplyError = PasswordCreateError | PasswordUpdateError | PasswordVerifyError
+PasswordPolicyApplyError = (
+    PasswordPolicyCreateError | PasswordPolicyUpdateError | PasswordPolicyVerifyError
+)
+PKIRoleApplyError = PKIRoleCreateError | PKIRoleUpdateError | PKIRoleVerifyError
+ResourceApplyError = (
+    PasswordApplyError | IssuerApplyError | PasswordPolicyApplyError | PKIRoleApplyError
+)
 
 
-EventType = Union[
-    PasswordApplyRequested,
-    PasswordApplyStarted,
-    PasswordCreateError,
-    PasswordUpdateError,
-    PasswordVerifyError,
-    PasswordCreateSuccess,
-    PasswordUpdateSuccess,
-    PasswordVerifySuccess,
-    PasswordVerifyError,
-    IssuerApplyRequested,
-    IssuerApplyStarted,
-    IssuerCreateError,
-    IssuerUpdateError,
-    IssuerVerifyError,
-    IssuerCreateSuccess,
-    IssuerUpdateSuccess,
-    IssuerVerifySuccess,
-    PasswordPolicyApplyRequested,
-    PasswordPolicyApplyStarted,
-    PasswordPolicyCreateError,
-    PasswordPolicyUpdateError,
-    PasswordPolicyVerifyError,
-    PasswordPolicyCreateSuccess,
-    PasswordPolicyUpdateSuccess,
-    PasswordPolicyVerifySuccess,
-    PKIRoleApplyRequested,
-    PKIRoleApplyStarted,
-    PKIRoleCreateError,
-    PKIRoleUpdateError,
-    PKIRoleVerifyError,
-    PKIRoleCreateSuccess,
-    PKIRoleUpdateSuccess,
-    PKIRoleVerifySuccess,
-    PostProcessRequested,
-]
+EventType = (
+    PasswordApplyRequested
+    | PasswordApplyStarted
+    | PasswordCreateError
+    | PasswordUpdateError
+    | PasswordVerifyError
+    | PasswordCreateSuccess
+    | PasswordUpdateSuccess
+    | PasswordVerifySuccess
+    | PasswordVerifyError
+    | IssuerApplyRequested
+    | IssuerApplyStarted
+    | IssuerCreateError
+    | IssuerUpdateError
+    | IssuerVerifyError
+    | IssuerCreateSuccess
+    | IssuerUpdateSuccess
+    | IssuerVerifySuccess
+    | PasswordPolicyApplyRequested
+    | PasswordPolicyApplyStarted
+    | PasswordPolicyCreateError
+    | PasswordPolicyUpdateError
+    | PasswordPolicyVerifyError
+    | PasswordPolicyCreateSuccess
+    | PasswordPolicyUpdateSuccess
+    | PasswordPolicyVerifySuccess
+    | PKIRoleApplyRequested
+    | PKIRoleApplyStarted
+    | PKIRoleCreateError
+    | PKIRoleUpdateError
+    | PKIRoleVerifyError
+    | PKIRoleCreateSuccess
+    | PKIRoleUpdateSuccess
+    | PKIRoleVerifySuccess
+    | PostProcessRequested
+)

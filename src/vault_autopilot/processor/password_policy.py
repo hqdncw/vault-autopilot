@@ -1,7 +1,10 @@
 import logging
 from dataclasses import dataclass
+from typing_extensions import override
 
-from .. import dto, state
+from ..service import PasswordPolicyService
+
+from .. import dto
 from ..dispatcher import event
 from . import abstract
 
@@ -10,9 +13,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)
 class PasswordPolicyApplyProcessor(abstract.AbstractProcessor):
-    state: state.PasswordPolicyState
+    pwd_policy_svc: PasswordPolicyService
 
-    def register_handlers(self) -> None:
+    @override
+    def initialize(self) -> None:
         async def _on_password_policy_apply_requested(
             ev: event.PasswordPolicyApplyRequested,
         ) -> None:
@@ -20,25 +24,25 @@ class PasswordPolicyApplyProcessor(abstract.AbstractProcessor):
             Responds to the :class:`event.PasswordPolicyApplyRequested` event by
             creating/updating the policy on the Vault server.
             """
-            async with self.state.sem:
-                await self._process(ev.resource)
+            async with self.sem:
+                await self._apply(ev.resource)
 
-        self.state.observer.register(
+        self.observer.register(
             (event.PasswordPolicyApplyRequested,), _on_password_policy_apply_requested
         )
 
-    async def _process(self, payload: dto.PasswordPolicyApplyDTO) -> None:
-        await self.state.observer.trigger(event.PasswordPolicyApplyStarted(payload))
+    async def _apply(self, payload: dto.PasswordPolicyApplyDTO) -> None:
+        await self.observer.trigger(event.PasswordPolicyApplyStarted(payload))
 
         # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
         try:
-            await self.state.pwd_policy_svc.update_or_create(payload)
+            await self.pwd_policy_svc.update_or_create(payload)
         except Exception:
-            await self.state.observer.trigger(event.PasswordPolicyCreateError(payload))
+            await self.observer.trigger(event.PasswordPolicyCreateError(payload))
             raise
 
-        await self.state.observer.trigger(event.PasswordPolicyCreateSuccess(payload))
+        await self.observer.trigger(event.PasswordPolicyCreateSuccess(payload))
 
         logger.debug(
-            "password policy resource applying finished: %r", payload.absolute_path()
+            "applying finished %r", payload.absolute_path()
         )
