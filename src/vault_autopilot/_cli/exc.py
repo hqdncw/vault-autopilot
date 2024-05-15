@@ -1,8 +1,9 @@
 from dataclasses import dataclass
+from typing import TypedDict
 
 import click
 
-from ..exc import FileContext
+from ..exc import Location
 
 
 @dataclass(slots=True)
@@ -30,15 +31,15 @@ class ConfigError(CLIError):
 
 @dataclass(slots=True, kw_only=True)
 class ConfigSyntaxError(ConfigError):
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     ctx: Context
 
 
 @dataclass(slots=True, kw_only=True)
 class ConfigValidationError(ConfigError):
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     ctx: Context

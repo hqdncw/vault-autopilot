@@ -110,7 +110,7 @@ class DependencyChain(Generic[T]):
         return self._graph[u][v]  # pyright: ignore[reportReturnType]
 
     def _get_node_payload(self, node_hash: int) -> T:
-        return self._graph.nodes[node_hash]["payload"]  # pyright: ignore[reportReturnType]
+        return self._graph.nodes[node_hash]["payload"]
 
     def add_node(self, node: T) -> int:
         node_hash = hash(node)
@@ -156,7 +156,7 @@ class DependencyChain(Generic[T]):
         Adds an edge from u to v, indicating that v depends on u.
         """
         u_hash, v_hash = self.add_node(u), self.add_node(v)
-        self._graph.add_edge(u_hash, v_hash, status=status)
+        self._graph.add_edge(u_hash, v_hash, status=status)  # pyright: ignore[reportUnknownMemberType]
         logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
 
     def has_node(self, node: T) -> bool:
