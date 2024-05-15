@@ -53,8 +53,8 @@ cli = [
 #   "colorlog~=6.8.0"
 # ]
 dev = [
-  "basedpyright~=1.10.4",
-  "ruff~=0.4.2",
+  "basedpyright~=1.12.1",
+  "ruff~=0.4.4",
   "mypy~=1.10.0",
   "pre-commit~=3.7.0"
 ]
@@ -108,7 +108,7 @@ module = [
 ]
 ignore_missing_imports = true
 
-[tool.basedpyright]
+[tool.pyright]
 typeCheckingMode = "basic"
 venvPath = "."
 venv = ".venv"
