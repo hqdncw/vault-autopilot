@@ -39,27 +39,6 @@ class PKIRoleNode(AbstractNode):
         return cls(payload)
 
 
-# @dataclass(slots=True)
-# class PKIRoleFallbackNode(AbstractNode):
-#     node_hash: int
-#
-#     @override
-#     def __hash__(self) -> int:
-#         return self.node_hash
-#
-#     @classmethod
-#     def from_pki_role_absolute_path(cls, path: str) -> "PKIRoleFallbackNode":
-#         """
-#         Creates a new :class:`PKIRoleFallbackNode` instance from a PKI Role absolute
-#         path.
-#
-#         Args:
-#             path: The path must be in the format ``pki/my-role`` where ``pki`` is the
-#                 PKI engine mount path and ``my-role`` is the name of the role.
-#         """
-#         return cls(hash(path))
-
-
 NodeType = PKIRoleNode | IssuerFallbackNode
 
 
