@@ -36,8 +36,8 @@ class PasswordPolicyManager(base.BaseManager):
             return cast(str, resp_body["data"]["password"])
         elif resp.status == http.HTTPStatus.NOT_FOUND:
             raise exc.PasswordPolicyNotFoundError(
-                "Failed to generate a password, password policy {policy_name!r} not \
-                found",
+                "Failed to generate a password, password policy {policy_name!r} not "
+                "found",
                 policy_name=policy_path,
             )
 

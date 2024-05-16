@@ -105,8 +105,8 @@ class GetResult(base.AbstractResult):
 
 def raise_issuer_name_taken_exc(issuer_name: str, mount_path: str) -> NoReturn:
     raise exc.IssuerNameTakenError(
-        "Issuer name {issuer_name!r} (secret_engine: {secret_engine!r}) is \
-        already in use. Please choose a different name",
+        "Issuer name {issuer_name!r} (secret_engine: {secret_engine!r}) is "
+        "already in use. Please choose a different name",
         ctx=exc.IssuerNameTakenError.Context(
             issuer_name=issuer_name,
             secret_engine=mount_path,

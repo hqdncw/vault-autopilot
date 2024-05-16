@@ -25,9 +25,9 @@ T = TypeVar("T")
 def login_required(func: Callable[P, T]) -> Callable[P, T]:
     @functools.wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        assert isinstance(
-            (client := args[0]), Client
-        ), "Expected instance of %r, got %r" % (Client, client)
+        assert isinstance((client := args[0]), Client), (
+            "Expected instance of %r, got %r" % (Client, client)
+        )
         assert (
             client.is_authenticated
         ), "The Vault client must be authenticated before calling this method."
@@ -45,8 +45,8 @@ def exception_handler(
             return await func(*args, **kwargs)
         except aiohttp.ClientConnectorError as ex:
             raise exc.ConnectionRefusedError(
-                "The connection to the server {host}:{port} was refused - did you \
-                specify the right host or port?",
+                "The connection to the server {host}:{port} was refused - did you "
+                "specify the right host or port?",
                 host=ex.host,
                 port=ex.port,
             ) from ex
@@ -75,7 +75,9 @@ class Client:
         init=False, default_factory=manager.PasswordPolicyManager
     )
     _pki_mgr: manager.PKIManager = field(init=False, default_factory=manager.PKIManager)
-    _render_password_policy: functools.partial[Coroutine[Any, Any, str]] = field(init=False)
+    _render_password_policy: functools.partial[Coroutine[Any, Any, str]] = field(
+        init=False
+    )
 
     def __post_init__(self) -> None:
         self._render_password_policy = functools.partial(
@@ -156,7 +158,7 @@ class Client:
     @exception_handler
     @login_required
     async def update_or_create_password_policy(
-        self, path: str, policy: password_policy.PasswordPolicy| str
+        self, path: str, policy: password_policy.PasswordPolicy | str
     ) -> None:
         """
         Creates a new password policy or updates an existing one.
