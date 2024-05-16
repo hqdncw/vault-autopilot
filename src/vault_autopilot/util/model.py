@@ -20,8 +20,9 @@ CUSTOM_MESSAGES = {
     # https://docs.pydantic.dev/latest/errors/validation_errors/#model_type
     "extra_field": "Extra fields not allowed",
     "missing": "Field is required",
-    "enum_value_out_of_range": "Input must be set to one of the following values: \
-    {expected_tags}",
+    "enum_value_out_of_range": (
+        "Input must be set to one of the following values: {expected_tags}"
+    ),
     "mapping_type": "Input must be a valid mapping",
     "sequence_type": "Input must be a valid sequence",
     "too_short": (
