@@ -92,7 +92,7 @@ class DependencyChain(Generic[T]):
     where certain objects must be processed before others.
     """
 
-    _graph: DiGraph[int] = field(init=False, default_factory=DiGraph)
+    _graph: "DiGraph[int]" = field(init=False, default_factory=DiGraph)
 
     @staticmethod
     def _raise_edge_not_found_exc(u: int, v: int) -> NoReturn:
