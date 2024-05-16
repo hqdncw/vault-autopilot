@@ -37,25 +37,39 @@ def convert_errors(
     custom_types: dict[str, str] = CUSTOM_TYPES,
 ) -> list[pydantic_core.ErrorDetails]:
     new_errors: list[pydantic_core.ErrorDetails] = []
+
+    # /*
+    # Oh, Great and Powerful Jesus Christ,
+    # Please bless this dirty hack with your divine guidance.
+    # May it work as intended, despite its questionable nature.
+    # Let it be a testament to our resourcefulness and ingenuity.
+    # And should it break, let it do so in the most spectacular and entertaining way
+    # possible.
+    # Amen.
+    # */
     for error in ex.errors(include_url=False):
         ctx = error.get("ctx")
 
-        # Hacky solution to ensure valid locations for tagged unions in Pydantic
-        # validation errors.
+        # Ensure valid locations for tagged unions in Pydantic validation errors
+        # 'loc': ('auth', 'token', 'token'), => ('auth', "token"),
         if error["loc"][0:3] == ("auth", "token", "token"):
             error["loc"] = (error["loc"][0], *error["loc"][2:])
+        # 'loc': ('auth',), => ('auth', "method"),
         if error["type"] in ("union_tag_not_found", "union_tag_invalid"):
             error["loc"] += (ctx["discriminator"].replace("'", ""),)  # type: ignore[index]
 
         if custom_type := custom_types.get(error["type"]):
             error["type"] = custom_type
+
         if custom_message := custom_messages.get(error["type"]):
             error["msg"] = custom_message.format(**ctx) if ctx else custom_message
+
         if ctx:
             # we don't want to show the context to the user
             del error["ctx"]
 
         new_errors.append(error)
+
     return new_errors
 
 
