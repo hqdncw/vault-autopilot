@@ -8,22 +8,10 @@ from .. import dto
 from ..dispatcher import event
 from ..service import PKIRoleService
 from ..util.dependency_chain import AbstractNode
-from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
+from .abstract import ChainBasedProcessor
 from .issuer import IssuerFallbackNode
 
 logger = logging.getLogger(__name__)
-
-
-# APPLY_STATUS_EVENT_MAP: dict[
-#     ApplyResultStatus, Type[Union[event.PKIRoleApplySuccess, event.PKIRoleApplyError]]
-# ] = {
-#     "verify_success": event.PKIRoleVerifySuccess,
-#     "create_success": event.PKIRoleCreateSuccess,
-#     "update_success": event.PKIRoleUpdateSuccess,
-#     "verify_error": event.PKIRoleVerifyError,
-#     "create_error": event.PKIRoleCreateError,
-#     "update_error": event.PKIRoleUpdateError,
-# }
 
 
 @dataclass(slots=True)
@@ -39,7 +27,7 @@ class PKIRoleNode(AbstractNode):
         return cls(payload)
 
 
-NodeType = PKIRoleNode | IssuerFallbackNode | SecretsEngineFallbackNode
+NodeType = PKIRoleNode | IssuerFallbackNode
 
 
 @dataclass(slots=True)
@@ -57,9 +45,6 @@ class PKIRoleApplyProcessor(
         return (
             IssuerFallbackNode.from_issuer_absolute_path(
                 node.payload.issuer_ref_absolute_path()
-            ),
-            SecretsEngineFallbackNode.from_absolute_path(
-                node.payload.spec["secrets_engine"]
             ),
         )
 
