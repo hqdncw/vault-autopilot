@@ -3,7 +3,7 @@ from typing import Literal, NotRequired
 from typing_extensions import TypedDict
 
 from .._pkg.asyva.dto import issuer
-from . import abstract
+from .abstract import AbstractDTO
 
 
 class Certificate(
@@ -22,18 +22,18 @@ class Chaining(TypedDict):
 
 class IssuerSpec(TypedDict):
     name: str
-    secret_engine: str
+    secrets_engine: str
     certificate: Certificate
     chaining: NotRequired[Chaining]
     # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
 
 
-class IssuerApplyDTO(abstract.AbstractDTO):
+class IssuerApplyDTO(AbstractDTO):
     kind: Literal["Issuer"] = "Issuer"
     spec: IssuerSpec
 
     def absolute_path(self) -> str:
-        return "/".join((self.spec["secret_engine"], self.spec["name"]))
+        return "/".join((self.spec["secrets_engine"], self.spec["name"]))
 
     def upstream_issuer_absolute_path(self) -> str:
         assert "chaining" in self.spec, "Chaining field is required"

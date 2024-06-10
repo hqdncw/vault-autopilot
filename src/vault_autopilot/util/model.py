@@ -48,16 +48,40 @@ def convert_errors(
     # possible.
     # Amen.
     # */
+
     for error in ex.errors(include_url=False):
         ctx = error.get("ctx")
 
+        try:
+            field = error["loc"][0]
+        except IndexError:
+            pass
+        else:
+            if field in (
+                "Password",
+                "PasswordPolicy",
+                "SecretsEngine",
+                "PKIRole",
+                "Issuer",
+            ):
+                error["loc"] = error["loc"][1:]
+
         # Ensure valid locations for tagged unions in Pydantic validation errors
-        # 'loc': ('auth', 'token', 'token'), => ('auth', "token"),
-        if error["loc"][0:3] == ("auth", "token", "token"):
-            error["loc"] = (error["loc"][0], *error["loc"][2:])
-        # 'loc': ('auth',), => ('auth', "method"),
-        if error["type"] in ("union_tag_not_found", "union_tag_invalid"):
-            error["loc"] += (ctx["discriminator"].replace("'", ""),)  # type: ignore[index]
+
+        # SecretsEngine
+        if error["loc"][0:3] in (
+            ("spec", "engine", "kv-v2"),
+            ("spec", "engine", "pki"),
+        ):
+            error["loc"] = (*error["loc"][:2], *error["loc"][3:])
+        else:
+            # Configuration file
+            # 'loc': ('auth', 'token', 'token'), => ('auth', "token"),
+            if error["loc"][0:3] == ("auth", "token", "token"):
+                error["loc"] = (error["loc"][0], *error["loc"][2:])
+            # 'loc': ('auth',), => ('auth', "method"),
+            if error["type"] in ("union_tag_not_found", "union_tag_invalid"):
+                error["loc"] += (ctx["discriminator"].replace("'", ""),)  # type: ignore[index]
 
         if custom_type := custom_types.get(error["type"]):
             error["type"] = custom_type

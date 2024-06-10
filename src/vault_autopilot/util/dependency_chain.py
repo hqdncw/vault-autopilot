@@ -1,6 +1,6 @@
 import abc
-from collections.abc import Iterable, Iterator
 import logging
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import (
     Callable,
@@ -10,9 +10,9 @@ from typing import (
     TypedDict,
     TypeVar,
 )
-from typing_extensions import override
 
 from networkx import DiGraph, set_node_attributes
+from typing_extensions import override
 
 T = TypeVar("T")
 P = TypeVar("P")
@@ -56,7 +56,8 @@ class FallbackNode(AbstractNode):
     Once a `FallbackNode` has been created, it can be used in place of a regular
     `Node` object.
 
-    Example:
+    Example::
+
         >>> @dataclass
         ... class Node(AbstractNode):
         ...    uid: int
@@ -68,6 +69,7 @@ class FallbackNode(AbstractNode):
         ...
         ... uid = 123
         ... assert hash(FallbackNode(uid)) == hash(Node(uid=uid, payload="foo"))
+        True
     """
 
     node_hash: int
@@ -116,7 +118,7 @@ class DependencyChain(Generic[T]):
         node_hash = hash(node)
 
         self._graph.add_node(node_hash, payload=node)
-        logger.debug("added node %r with payload %r", node_hash, node)
+        logger.debug("added node %r", node)
         return node_hash
 
     def get_node_by_hash(self, value: int, default: P) -> T | P:
@@ -129,7 +131,8 @@ class DependencyChain(Generic[T]):
 
     def relabel_nodes(self, pairs: Iterable[tuple[T, T]]) -> None:
         """
-        Examples:
+        Example::
+
             >>> mgr = DependencyChain()
             >>> mgr.add_node("A")
             >>> mgr.add_node("B")
@@ -155,7 +158,7 @@ class DependencyChain(Generic[T]):
         """
         Adds an edge from u to v, indicating that v depends on u.
         """
-        u_hash, v_hash = self.add_node(u), self.add_node(v)
+        u_hash, v_hash = hash(u), hash(v)
         self._graph.add_edge(u_hash, v_hash, status=status)  # pyright: ignore[reportUnknownMemberType]
         logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
 
@@ -183,13 +186,10 @@ class DependencyChain(Generic[T]):
     def are_inbound_edges_satisfied(
         self,
         node: T,
-        default: P,
         exclude: Callable[[tuple[int, int]], bool] = lambda _: False,
-    ) -> bool | P:
+    ) -> bool:
         """
         Checks if all inbound edges of a given node have their status satisfied.
-
-        If the node has no inbound edges, returns the default value.
 
         Args:
             default: The value to return if the node has no inbound edges.
@@ -198,22 +198,22 @@ class DependencyChain(Generic[T]):
                      excluded from the check.
 
         Returns:
-            True if all inbound edges are satisfied, False otherwise. If the node has
-            no inbound edges, returns the default value.
-
+            True if all inbound edges are satisfied, False otherwise.
         """
+
         return (
-            next(
-                filter(
-                    lambda edge: exclude(edge[:2])
-                    and False
-                    or not self._is_satisfied(edge),  # pyright: ignore[reportArgumentType]
-                    self._graph.in_edges(hash(node), data=True),
-                ),
-                default_obj,
+            id(
+                next(
+                    filter(
+                        lambda edge: False  # type: ignore[arg-type]
+                        if exclude(edge[:2])  # type: ignore[index]
+                        else not self._is_satisfied(edge),  # type: ignore[arg-type]
+                        self._graph.in_edges(hash(node), data=True),
+                    ),
+                    default_obj,
+                )
             )
             == id(default_obj)
-            and default
         )
 
     def filter_upstreams(self, node: T, function: Callable[[T], bool]) -> Iterator[T]:
@@ -222,7 +222,8 @@ class DependencyChain(Generic[T]):
 
         Args:
             node: The node to filter upstreams for.
-            function: A function that takes a node payload as input and returns a boolean value.
+            function: A function that takes a node payload as input and returns a
+                boolean value.
 
         Returns:
             An iterator of node payloads that satisfy the provided function.
@@ -237,7 +238,8 @@ class DependencyChain(Generic[T]):
 
         Args:
             node: The node to filter downstreams for.
-            function: A function that takes a node payload as input and returns a boolean value.
+            function: A function that takes a node payload as input and returns a
+                boolean value.
 
         Returns:
             An iterator of node payloads that satisfy the provided function.

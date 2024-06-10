@@ -4,10 +4,10 @@ import logging
 import pathlib
 from dataclasses import dataclass
 from typing import Literal
-from typing_extensions import override
 
 import aiohttp
 import pydantic
+from typing_extensions import override
 
 from . import constants, exc
 
@@ -98,6 +98,7 @@ class TokenAuthenticator(AbstractAuthenticator):
                 raise exc.UnauthorizedError(
                     "The token you provided is invalid or has expired. Please "
                     "ensure that your Vault credentials are correct and try again.",
+                    {},
                 )
             case _:
                 pass

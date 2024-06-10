@@ -1,9 +1,10 @@
 from dataclasses import dataclass
+
 from typing_extensions import override
 
 from .. import dto, util
 from .._pkg import asyva
-from ..dto.password import StringEncodingType
+from ..dto.abstract import StringEncodingType
 from . import abstract
 
 
@@ -16,22 +17,16 @@ def encode(value: str, encoding: StringEncodingType) -> str:
 
 
 @dataclass(slots=True)
-class PasswordService(abstract.VersionedSecretApplyMixin):
+class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
     client: asyva.Client
 
     @override
     async def check_and_set(self, payload: dto.PasswordApplyDTO) -> None:
         """
-        Sets a password secret with the given payload and version, while ensuring that
-        the version is valid and the secret is updated correctly.
-
-        Specifically, this method will only set the secret if the following conditions
-        are met:
-            - The provided version is greater than the current secret version.
-            - The provided version is not more than 1 greater than the current version.
-
-        If the provided version does not meet these conditions, a
-        :class:`CASParameterMismatchError` will be raised.
+        Performs `Check-and-Set` operation on a secret at path
+        ``payload["spec"]["path"]``. The value is a generated password using the policy
+        ``payload["spec"]["policyPath"]`` and the key is
+        ``payload["spec"]["secretKey"]``
 
         Raises:
             PasswordPolicyNotFoundError: If the policy is not found.
@@ -48,5 +43,5 @@ class PasswordService(abstract.VersionedSecretApplyMixin):
             path=spec["path"],
             data={spec["secret_key"]: encode(value=value, encoding=spec["encoding"])},
             cas=spec["version"] - 1,
-            mount_path=spec["secret_engine"],
+            mount_path=spec["secrets_engine"],
         )

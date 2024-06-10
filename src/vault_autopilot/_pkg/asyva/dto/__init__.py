@@ -9,6 +9,12 @@ from .issuer import (
 )
 from .pki_role import PKIRoleCreateDTO
 from .secret import SecretCreateDTO, SecretGetVersionDTO
+from .secrets_engine import (
+    SecretsEngineConfigureDTO,
+    SecretsEngineEnableDTO,
+    SecretsEngineGetDTO,
+    SecretsEngineTuneMountConfigurationDTO,
+)
 
 __all__ = (
     "IssuerGenerateIntmdCSRDTO",
@@ -21,4 +27,8 @@ __all__ = (
     "SecretCreateDTO",
     "SecretGetVersionDTO",
     "PKIRoleCreateDTO",
+    "SecretsEngineEnableDTO",
+    "SecretsEngineConfigureDTO",
+    "SecretsEngineTuneMountConfigurationDTO",
+    "SecretsEngineGetDTO",
 )

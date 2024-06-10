@@ -14,8 +14,7 @@ from rich.text import Text
 @dataclass(slots=True)
 class AbstractRenderer:
     @abstractmethod
-    def compose_renderable(self) -> RenderableType:
-        ...
+    def compose_renderable(self) -> RenderableType: ...
 
 
 @dataclass(slots=True)

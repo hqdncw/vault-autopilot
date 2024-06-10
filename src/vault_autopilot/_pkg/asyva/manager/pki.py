@@ -1,14 +1,16 @@
 import http
-import logging
 from typing import Any, NoReturn, NotRequired
 
+import aiohttp
 import pydantic
 from typing_extensions import TypedDict, override
 
+from vault_autopilot._pkg.asyva.exc import IssuerNameTakenError, VaultAPIError
+
 from .... import util
-from .. import constants, dto, exc
+from .. import constants, dto
 from ..dto import issuer
-from . import base
+from .base import AbstractResult, BaseManager
 
 __all__ = (
     "AbstractCertData",
@@ -21,10 +23,7 @@ __all__ = (
 )
 
 
-logger = logging.getLogger(__name__)
-
-
-GENERATE_QUERY_PARAMS = {"type_", "mount_path"}
+GENERATE_QUERY_PARAMS = {"type", "mount_path"}
 
 
 class AbstractCertData(TypedDict):
@@ -34,7 +33,7 @@ class AbstractCertData(TypedDict):
     serial_number: str
 
 
-class GenerateIntmdCSRResult(base.AbstractResult):
+class GenerateIntmdCSRResult(AbstractResult):
     class Data(TypedDict):
         csr: str
         key_id: str
@@ -44,7 +43,7 @@ class GenerateIntmdCSRResult(base.AbstractResult):
     data: Data
 
 
-class GenerateRootResult(base.AbstractResult):
+class GenerateRootResult(AbstractResult):
     class Data(TypedDict):
         issuer_id: str
         issuer_name: str
@@ -54,14 +53,14 @@ class GenerateRootResult(base.AbstractResult):
     data: Data
 
 
-class SignIntmdResult(base.AbstractResult):
+class SignIntmdResult(AbstractResult):
     class Data(AbstractCertData):
         ca_chain: list[str]
 
     data: Data
 
 
-class SetSignedIntmdResult(base.AbstractResult):
+class SetSignedIntmdResult(AbstractResult):
     class Data(TypedDict):
         imported_issuers: NotRequired[list[str]]
         imported_keys: NotRequired[list[str]]
@@ -72,7 +71,7 @@ class SetSignedIntmdResult(base.AbstractResult):
     data: Data
 
 
-class UpdateResult(base.AbstractResult):
+class UpdateResult(AbstractResult):
     class Data(TypedDict):
         ca_chain: list[str]
         certificate: str
@@ -96,25 +95,28 @@ class UpdateResult(base.AbstractResult):
         return cls.model_construct(**data)
 
 
-class GetResult(base.AbstractResult):
+class GetResult(AbstractResult):
     class Data(UpdateResult.Data):
         revoked: bool
 
     data: Data
 
 
-def raise_issuer_name_taken_exc(issuer_name: str, mount_path: str) -> NoReturn:
-    raise exc.IssuerNameTakenError(
-        "Issuer name {issuer_name!r} (secret_engine: {secret_engine!r}) is "
-        "already in use. Please choose a different name",
-        ctx=exc.IssuerNameTakenError.Context(
-            issuer_name=issuer_name,
-            secret_engine=mount_path,
+async def raise_issuer_name_taken_exc(
+    response: aiohttp.ClientResponse, name_collision: str, secrets_engine: str
+) -> NoReturn:
+    raise IssuerNameTakenError(
+        "Issuer name {ctx[path_collision]!r} (secrets_engine: {ctx[mount_path]!r}) "
+        "is already in use. Please choose a different name",
+        ctx=IssuerNameTakenError.Context(
+            **await VaultAPIError.compose_context(response),
+            path_collision=name_collision,
+            mount_path=secrets_engine,
         ),
     )
 
 
-class PKIManager(base.BaseManager):
+class PKIManager(BaseManager):
     async def generate_root(
         self,
         payload: dto.IssuerGenerateRootDTO,
@@ -124,28 +126,25 @@ class PKIManager(base.BaseManager):
                 "/v1/{mount_path}/issuers/generate/{issuer_type}/{cert_type}".format(
                     mount_path=payload["mount_path"],
                     issuer_type="root",
-                    cert_type=payload["type_"],
+                    cert_type=payload["type"],
                 ),
                 data=util.model.model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
             )
 
-        result = await resp.json()
+        result = await resp.json() or {}
+
         if resp.status == http.HTTPStatus.OK:
             return GenerateRootResult.from_response(result)
 
-        if constants.ISSUER_NAME_TAKEN in result["errors"]:
-            raise_issuer_name_taken_exc(
-                issuer_name=payload[
-                    "issuer_name"
-                ],  # pyright: ignore[reportTypedDictNotRequiredAccess]
-                mount_path=payload["mount_path"],
-            )
+        for msg in result.get("errors", {}):
+            if constants.ISSUER_NAME_TAKEN in msg:
+                await raise_issuer_name_taken_exc(
+                    resp,
+                    name_collision=payload["issuer_name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
+                    secrets_engine=payload["mount_path"],
+                )
 
-        logger.debug(result)
-
-        raise await exc.VaultAPIError.from_response(
-            "Failed to create root issuer", resp
-        )
+        raise await VaultAPIError.from_response("Failed to create root issuer", resp)
 
     async def generate_intmd_csr(
         self, payload: dto.IssuerGenerateIntmdCSRDTO
@@ -155,18 +154,17 @@ class PKIManager(base.BaseManager):
                 "/v1/{mount_path}/issuers/generate/{issuer_type}/{cert_type}".format(
                     mount_path=payload["mount_path"],
                     issuer_type="intermediate",
-                    cert_type=payload["type_"],
+                    cert_type=payload["type"],
                 ),
                 data=util.model.model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
             )
 
-        result = await resp.json()
+        result = await resp.json() or {}
+
         if resp.status == http.HTTPStatus.OK:
             return GenerateIntmdCSRResult.from_response(result)
 
-        logger.debug(await resp.json())
-
-        raise await exc.VaultAPIError.from_response(
+        raise await VaultAPIError.from_response(
             "Failed to generate intermediate CSR", resp
         )
 
@@ -181,11 +179,9 @@ class PKIManager(base.BaseManager):
             )
 
         if resp.status == http.HTTPStatus.OK:
-            return SignIntmdResult.from_response(await resp.json())
+            return SignIntmdResult.from_response(await resp.json() or {})
 
-        logger.debug(await resp.json())
-
-        raise await exc.VaultAPIError.from_response(
+        raise await VaultAPIError.from_response(
             "Failed to sign intermediate certificate", resp
         )
 
@@ -202,11 +198,9 @@ class PKIManager(base.BaseManager):
             )
 
         if resp.status == http.HTTPStatus.OK:
-            return SetSignedIntmdResult.from_response(await resp.json())
+            return SetSignedIntmdResult.from_response(await resp.json() or {})
 
-        logger.debug(await resp.json())
-
-        raise await exc.VaultAPIError.from_response(
+        raise await VaultAPIError.from_response(
             "Failed to set signed intermediate certificate", resp
         )
 
@@ -220,9 +214,7 @@ class PKIManager(base.BaseManager):
         if resp.status == http.HTTPStatus.OK:
             return
 
-        logger.debug(await resp.json())
-
-        raise await exc.VaultAPIError.from_response("Failed to update key", resp)
+        raise await VaultAPIError.from_response("Failed to update key", resp)
 
     async def update_issuer(self, payload: dto.IssuerUpdateDTO) -> UpdateResult:
         async with self.new_session() as sess:
@@ -233,21 +225,20 @@ class PKIManager(base.BaseManager):
                 ),
             )
 
-        result = await resp.json()
+        result = await resp.json() or {}
+
         if resp.status == http.HTTPStatus.OK:
             return UpdateResult.from_response(result)
 
-        if constants.ISSUER_NAME_TAKEN in result["errors"]:
-            raise_issuer_name_taken_exc(
-                issuer_name=payload[
-                    "issuer_name"
-                ],  # pyright: ignore[reportTypedDictNotRequiredAccess]
-                mount_path=payload["mount_path"],
-            )
+        for msg in result.get("errors", {}):
+            if constants.ISSUER_NAME_TAKEN in result["errors"]:
+                await raise_issuer_name_taken_exc(
+                    resp,
+                    name_collision=payload["issuer_name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
+                    secrets_engine=payload["mount_path"],
+                )
 
-        logger.debug(result)
-
-        raise await exc.VaultAPIError.from_response("Failed to update Issuer", resp)
+        raise await VaultAPIError.from_response("Failed to update Issuer", resp)
 
     async def update_or_create_role(self, payload: dto.PKIRoleCreateDTO) -> None:
         async with self.new_session() as sess:
@@ -261,10 +252,8 @@ class PKIManager(base.BaseManager):
         if resp.status == http.HTTPStatus.OK:
             return
 
-        logger.debug(await resp.json())
-
-        raise await exc.VaultAPIError.from_response(
-            "Failed to create/update pki role", await resp.json()
+        raise await VaultAPIError.from_response(
+            "Failed to create/update pki role", resp
         )
 
     async def get_issuer(self, payload: dto.IssuerGetDTO) -> GetResult | None:
@@ -277,12 +266,12 @@ class PKIManager(base.BaseManager):
 
         if resp.status == http.HTTPStatus.OK:
             return GetResult.from_response(result)
-        elif (
-            resp.status == http.HTTPStatus.INTERNAL_SERVER_ERROR
-            and constants.ISSUER_NOT_FOUND in result["errors"][0]
-        ):
-            return None
 
-        logger.debug(await resp.json())
+        for msg in result.get("errors", {}):
+            if constants.ISSUER_NOT_FOUND in msg:
+                if not resp.status == http.HTTPStatus.INTERNAL_SERVER_ERROR:
+                    continue
 
-        raise await exc.VaultAPIError.from_response("Failed to get issuer", resp)
+                return None
+
+        raise await VaultAPIError.from_response("Failed to get issuer", resp)

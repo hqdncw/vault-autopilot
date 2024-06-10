@@ -1,21 +1,23 @@
 import functools
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Coroutine
 from dataclasses import dataclass, field
 from typing import (
     Any,
     Callable,
     ParamSpec,
+    Self,
     TypeVar,
     overload,
 )
-from collections.abc import Coroutine
 
 import aiohttp
 import jinja2
 from typing_extensions import Unpack
 
-from . import authenticator, composer, dto, exc, manager
-from .dto import password_policy
+from vault_autopilot._pkg.asyva.manager import password_policy, system_backend
+
+from . import authenticator, composer, dto
+from .dto.password_policy import PasswordPolicy
 from .manager import kvv2, pki
 
 P = ParamSpec("P")
@@ -44,11 +46,12 @@ def exception_handler(
         try:
             return await func(*args, **kwargs)
         except aiohttp.ClientConnectorError as ex:
-            raise exc.ConnectionRefusedError(
-                "The connection to the server {host}:{port} was refused - did you "
-                "specify the right host or port?",
-                host=ex.host,
-                port=ex.port,
+            raise ConnectionRefusedError(
+                (
+                    'The connection to the server "%s:%s" was refused - did you '
+                    "specify the right host or port?"
+                )
+                % (ex.host, ex.port)
             ) from ex
 
     return wrapper
@@ -68,13 +71,14 @@ class Client:
         ),
     )
     _authn_sess: aiohttp.ClientSession | None = field(init=False, default=None)
-    _kvv2_mgr: manager.KVV2Manager = field(
-        init=False, default_factory=manager.KVV2Manager
+    _kvv2_mgr: kvv2.KVV2Manager = field(init=False, default_factory=kvv2.KVV2Manager)
+    _pwd_policy_mgr: password_policy.PasswordPolicyManager = field(
+        init=False, default_factory=password_policy.PasswordPolicyManager
     )
-    _pwd_policy_mgr: manager.PasswordPolicyManager = field(
-        init=False, default_factory=manager.PasswordPolicyManager
+    _pki_mgr: pki.PKIManager = field(init=False, default_factory=pki.PKIManager)
+    _sb_mgr: system_backend.SystemBackendManager = field(
+        init=False, default_factory=system_backend.SystemBackendManager
     )
-    _pki_mgr: manager.PKIManager = field(init=False, default_factory=manager.PKIManager)
     _render_password_policy: functools.partial[Coroutine[Any, Any, str]] = field(
         init=False
     )
@@ -94,11 +98,7 @@ class Client:
         base_url: str,
         authn: authenticator.AbstractAuthenticator,
         namespace: str | None = None,
-    ) -> None:
-        assert (
-            not self.is_authenticated
-        ), "Attempting to authenticate while already authenticated"
-
+    ) -> Self:
         # Obtain the authorization bearer token
         async with composer.BaseComposer(base_url=base_url).create() as sess:
             token = await authn.authenticate(sess=sess)
@@ -112,6 +112,9 @@ class Client:
         self._kvv2_mgr.configure(sess=self._authn_sess)
         self._pwd_policy_mgr.configure(sess=self._authn_sess)
         self._pki_mgr.configure(sess=self._authn_sess)
+        self._sb_mgr.configure(sess=self._authn_sess)
+
+        return self
 
     async def __aenter__(self) -> "Client":
         return self
@@ -152,13 +155,13 @@ class Client:
 
     @overload
     async def update_or_create_password_policy(
-        self, path: str, policy: password_policy.PasswordPolicy
+        self, path: str, policy: PasswordPolicy
     ) -> None: ...
 
     @exception_handler
     @login_required
     async def update_or_create_password_policy(
-        self, path: str, policy: password_policy.PasswordPolicy | str
+        self, path: str, policy: PasswordPolicy | str
     ) -> None:
         """
         Creates a new password policy or updates an existing one.
@@ -244,3 +247,38 @@ class Client:
         self, **payload: Unpack[dto.PKIRoleCreateDTO]
     ) -> None:
         return await self._pki_mgr.update_or_create_role(payload)
+
+    @exception_handler
+    @login_required
+    async def enable_secrets_engine(
+        self, **payload: Unpack[dto.SecretsEngineEnableDTO]
+    ) -> None:
+        return await self._sb_mgr.enable_secrets_engine(payload)
+
+    @exception_handler
+    @login_required
+    async def configure_secrets_engine(
+        self, **payload: Unpack[dto.SecretsEngineConfigureDTO]
+    ) -> None:
+        return await self._kvv2_mgr.configure_secret_engine(payload)
+
+    @exception_handler
+    @login_required
+    async def tune_mount_configuration(
+        self, **payload: Unpack[dto.SecretsEngineTuneMountConfigurationDTO]
+    ) -> None:
+        return await self._sb_mgr.tune_mount_configuration(payload)
+
+    @exception_handler
+    @login_required
+    async def read_mount_configuration(
+        self, **payload: Unpack[dto.SecretsEngineGetDTO]
+    ) -> system_backend.ReadMountConfigurationResult | None:
+        return await self._sb_mgr.read_mount_configuration(payload)
+
+    @exception_handler
+    @login_required
+    async def read_kv_configuration(
+        self, **payload: Unpack[dto.SecretsEngineGetDTO]
+    ) -> kvv2.ReadConfigurationResult | None:
+        return await self._kvv2_mgr.read_configuration(payload)

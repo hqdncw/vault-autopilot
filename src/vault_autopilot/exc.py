@@ -1,23 +1,30 @@
 import pathlib
 from dataclasses import dataclass
 from typing import NotRequired, TypedDict
+
 from typing_extensions import override
 
-from . import dto
+from .dto.abstract import VersionedSecretApplyDTO
 
 __all__ = (
     "ApplicationError",
+    "ManifestError",
     "ManifestValidationError",
     "ManifestSyntaxError",
+    "SecretIntegrityError",
+    "SecretVersionMismatchError",
 )
 
 
 @dataclass(slots=True)
 class ApplicationError(Exception):
+    class Context(TypedDict): ...
+
     message: str
+    ctx: Context | None
 
     def format_message(self) -> str:
-        return self.message
+        return self.message.format(ctx=self.ctx or {})
 
     @override
     def __str__(self) -> str:
@@ -45,12 +52,14 @@ class ManifestSyntaxError(ManifestError):
     class Context(TypedDict):
         loc: Location
 
-    message: str
     ctx: Context
 
     @override
     def format_message(self) -> str:
-        return "Decoding failed '%s': %s" % (self.ctx["loc"]["filename"], self.message)
+        return "Decoding failed for manifest file %r.\n\n%s" % (
+            str(self.ctx["loc"]["filename"]),
+            self.message,
+        )
 
 
 @dataclass(slots=True)
@@ -62,12 +71,14 @@ class ManifestValidationError(ManifestError):
     class Context(TypedDict):
         loc: Location
 
-    message: str
     ctx: Context
 
     @override
     def format_message(self) -> str:
-        return "Validation failed '%s': %s" % (self.ctx["loc"]["filename"], self.message)
+        return "Validation failed for manifest file %r.\n\n%s" % (
+            str(self.ctx["loc"]["filename"]),
+            self.message,
+        )
 
 
 @dataclass(slots=True)
@@ -78,6 +89,6 @@ class SecretIntegrityError(ApplicationError):
 @dataclass(slots=True)
 class SecretVersionMismatchError(SecretIntegrityError):
     class Context(TypedDict):
-        resource: dto.VersionedSecretApplyDTO
+        resource: VersionedSecretApplyDTO
 
     ctx: Context

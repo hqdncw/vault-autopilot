@@ -1,14 +1,14 @@
 from abc import abstractmethod
-from typing import Literal, NotRequired, TypedDict
+from typing import Generic, Literal, NotRequired, TypedDict, TypeVar
 
 from vault_autopilot._pkg.asyva.exc import CASParameterMismatchError
 from vault_autopilot.exc import SecretVersionMismatchError
 
-from ..dto import VersionedSecretApplyDTO
+from ..dto.abstract import VersionedSecretApplyDTO
 
 __all__ = ("VersionedSecretApplyMixin",)
 
-
+T = TypeVar("T", bound=VersionedSecretApplyDTO)
 ApplyResultStatus = Literal[
     "verify_success",
     "create_success",
@@ -24,8 +24,8 @@ class ApplyResult(TypedDict):
     errors: NotRequired[tuple[Exception, ...]]
 
 
-class VersionedSecretApplyMixin:
-    async def apply(self, payload: VersionedSecretApplyDTO) -> ApplyResult:
+class VersionedSecretApplyMixin(Generic[T]):
+    async def apply(self, payload: T) -> ApplyResult:
         """
         Updates, creates, or verifies a secret using the given payload and version.
 
@@ -56,8 +56,8 @@ class VersionedSecretApplyMixin:
                     exc = SecretVersionMismatchError(
                         "Resource %r version mismatch. Expected either version "
                         "%d (to keep the secret data untouched) or version %d (to "
-                        "regenerate the secret data). Instead, version %r was provided. "
-                        "Please enter the correct version and try again."
+                        "regenerate the secret data). Instead, version %r was provided."
+                        " Please enter the correct version and try again."
                         % (
                             payload.absolute_path(),
                             required_cas,
@@ -81,4 +81,4 @@ class VersionedSecretApplyMixin:
         )
 
     @abstractmethod
-    async def check_and_set(self, payload: VersionedSecretApplyDTO) -> None: ...
+    async def check_and_set(self, payload: T) -> None: ...

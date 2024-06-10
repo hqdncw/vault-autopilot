@@ -1,6 +1,6 @@
-from dataclasses import dataclass
-from typing import Any, NotRequired
 from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import NotRequired
 
 import aiohttp
 from typing_extensions import TypedDict, override
@@ -12,56 +12,39 @@ class AsyvaError(Exception):
     Base exception for all asyva errors.
     """
 
+    class Context(TypedDict): ...
+
     message: str
+    ctx: Context
 
-
-@dataclass(slots=True)
-class ConnectionRefusedError(AsyvaError):
-    """
-    Raised when the connection to the server is refused.
-
-    This error is typically raised when the server does not accept the incoming
-    connection, often due to a firewall rule or because the server is not listening on
-    the specified port. Check the network connectivity and ensure that the server is
-    running and accepting connections on the specified port.
-    """
-
-    host: str
-    port: int | None
+    def format_message(self) -> str:
+        return f"{self.message.format(ctx=self.ctx or {})}.\n\n{[self.ctx]}"
 
     @override
     def __str__(self) -> str:
-        return self.message.format(host=self.host, port=self.port)
+        return self.format_message()
 
 
 @dataclass(slots=True)
 class VaultAPIError(AsyvaError):
-    """
-    Base exception for all Vault API errors.
-    """
+    class Context(TypedDict):
+        response: Iterable[str] | None
+        http_method: str
+        request_url: str
 
-    message: str
-    errors: Iterable[str] | None = None
-    method: str | None = None
-    url: str | None = None
-
-    @override
-    def __str__(self) -> str:
-        msg = self.message
-
-        if self.errors:
-            msg += f". Errors: {', '.join(self.errors)}"
-        if self.method:
-            msg += f", on {self.method}"
-        if self.url:
-            msg += f", URL: {self.url}"
-        return msg
+    @classmethod
+    async def compose_context(cls, response: aiohttp.ClientResponse) -> "Context":
+        return cls.Context(
+            response=(await response.json() or {}),
+            http_method=response.method,
+            request_url=str(response.url),
+        )
 
     @classmethod
     async def from_response(
-        cls, message: str, resp: aiohttp.ClientResponse
+        cls, message: str, response: aiohttp.ClientResponse
     ) -> "VaultAPIError":
-        _STATUS_EXCEPTION_MAP = {
+        _STATUS_EXCEPTION_MAP: dict[int, type[VaultAPIError]] = {
             400: InvalidRequestError,
             401: UnauthorizedError,
             403: ForbiddenError,
@@ -73,12 +56,8 @@ class VaultAPIError(AsyvaError):
             503: VaultDownError,
         }
 
-        errors: dict[Any, Any] = await resp.json()
-        return _STATUS_EXCEPTION_MAP.get(resp.status, UnexpectedError)(
-            message=message,
-            errors=errors.get("errors"),
-            method=resp.method,
-            url=str(resp.url),
+        return _STATUS_EXCEPTION_MAP.get(response.status, UnexpectedError)(
+            message=message, ctx=await cls.compose_context(response)
         )
 
 
@@ -137,74 +116,74 @@ class UnauthorizedError(VaultAPIError):
 
 
 @dataclass(slots=True, kw_only=True)
-class PasswordPolicyNotFoundError(VaultAPIError):
+class ResourceNotFoundError(InvalidRequestError):
     """
-    Raised when a password policy is not found.
-
-    Args:
-        policy_name: The name of the required password policy.
+    Raised when a resource is not found.
     """
 
-    policy_name: str
+    class Context(VaultAPIError.Context):
+        """
+        Attributes:
+            path: The path of the resource that was not found.
+            mount_path: The mount path of the resource that was not found
+        """
 
-    @override
-    def __str__(self) -> str:
-        return self.message.format(policy_name=self.policy_name)
+        path: str
+        mount_path: str
+
+    ctx: Context
+
+
+PasswordPolicyNotFoundError = ResourceNotFoundError
 
 
 @dataclass(slots=True, kw_only=True)
-class CASParameterMismatchError(VaultAPIError):
+class CASParameterMismatchError(InvalidRequestError):
     """
     Raised when modifying a Vault secret fails due to a problem with the Check
     And Set (CAS) parameter.
 
-    Attributes:
-        message: A human-readable description of the error.
-        secret: The path of the secret that was affected by the error.
-        provided_cas: The value of the CAS parameter that the client set.
-        required_cas: The value of the CAS parameter that the server requires.
-
     References:
         See the HashiCorp documentation on Vault's CAS parameter for more information:
-        https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#cas.
+        <https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#cas>.
     """
 
-    class Context(TypedDict):
-        secret_path: str
+    class Context(VaultAPIError.Context):
+        """
+        Attributes:
+            secret: The path to the secret that the client attempted to modify. It
+                follows the standard format of ``mount_path/path``, where ``mount_path``
+                is the mount point of the secrets engine, and path leads to the specific
+                secret within that engine.
+            provided_cas: The value of the CAS parameter that the client set.
+            required_cas: The value of the CAS parameter that the server requires.
+        """
+
+        secret: str
         provided_cas: NotRequired[int]
         required_cas: NotRequired[int]
 
     ctx: Context
 
-    @override
-    def __str__(self) -> str:
-        return self.message.format(
-            secret_path=self.ctx["secret_path"],
-            provided_cas=self.ctx.get("provided_cas", "not set"),
-            required_cas=self.ctx.get("required_cas", "unknown"),
-        )
-
 
 @dataclass(slots=True, kw_only=True)
-class IssuerNameTakenError(VaultAPIError):
+class ResourcePathInUseError(InvalidRequestError):
     """
-    Raised when attempting to create a new issuer with a name that is already in use.
-
-    Attributes:
-        message: A human-readable message describing the error.
-        issuer_name: The name of the conflicting issuer.
-        secret_engine: The path of the PKI engine that contains the conflicting issuer.
+    Raised when attempting to create a new resource with a path that is already in use.
     """
 
-    class Context(TypedDict):
-        issuer_name: str
-        secret_engine: str
+    class Context(VaultAPIError.Context):
+        """
+        Attributes:
+            path_collision: The path of the conflicting resource.
+            mount_path: The mount path where the resource was attempted to be created.
+        """
+
+        path_collision: str
+        mount_path: str
 
     ctx: Context
 
-    @override
-    def __str__(self) -> str:
-        return self.message.format(
-            issuer_name=self.ctx["issuer_name"],
-            secret_engine=self.ctx["secret_engine"],
-        )
+
+IssuerNameTakenError = ResourcePathInUseError
+SecretsEnginePathInUseError = ResourcePathInUseError
