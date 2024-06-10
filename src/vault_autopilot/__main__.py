@@ -11,6 +11,7 @@ from ruamel.yaml.error import YAMLError
 from vault_autopilot import _conf, util
 from vault_autopilot._cli.commands.apply import apply
 from vault_autopilot._cli.exc import ConfigSyntaxError, ConfigValidationError
+from vault_autopilot.exc import Location
 
 ConfigOption = Optional[pathlib.Path]
 
@@ -27,8 +28,8 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> _conf.Settings:
         payload = _loader.load(fn.read_bytes())
     except YAMLError as ex:
         raise ConfigSyntaxError(
-            "Invalid configuration file: Decoding failed %r: %s" % (str(fn), ex),
-            ctx=ConfigSyntaxError.Context(filename=fn),
+            str(ex),
+            ctx=ConfigSyntaxError.Context(loc=Location(filename=fn)),
         ) from ex
 
     try:
@@ -36,9 +37,8 @@ def validate_config(ctx: click.Context, fn: ConfigOption) -> _conf.Settings:
     except pydantic.ValidationError as ex:
         # TODO: prevent token leakage in case of validation error
         raise ConfigValidationError(
-            "Invalid configuration file: Validation failed %s: %s"
-            % (str(fn), util.model.convert_errors(ex)),
-            ctx=ConfigValidationError.Context(filename=fn),
+            str(util.model.convert_errors(ex)),
+            ctx=ConfigValidationError.Context(loc=Location(filename=fn)),
         ) from ex
 
     assert isinstance(res, _conf.Settings), "Expected %r, got %r" % (

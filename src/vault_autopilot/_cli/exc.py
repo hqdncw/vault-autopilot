@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from typing import TypedDict
 
 import click
+from typing_extensions import override
 
-from ..exc import FileContext
+from ..exc import Location
 
 
 @dataclass(slots=True)
@@ -13,7 +15,7 @@ class CLIError(click.ClickException):
     Provides an `exit_code` attribute for specifying a specific exit code, and a
     `message` attribute containing a human-readable description of the error.
 
-    See Also:
+    Warning:
         Allowed exit codes are defined in the Advanced Bash-Scripting Guide at
         https://tldp.org/LDP/abs/html/exitcodes.html. Note that user-defined exit
         codes are restricted to the range 64 - 113.
@@ -30,15 +32,29 @@ class ConfigError(CLIError):
 
 @dataclass(slots=True, kw_only=True)
 class ConfigSyntaxError(ConfigError):
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     ctx: Context
+
+    @override
+    def format_message(self) -> str:
+        return "Decoding failed for configuration file %r.\n\n%s" % (
+            str(self.ctx["loc"]["filename"]),
+            self.message,
+        )
 
 
 @dataclass(slots=True, kw_only=True)
 class ConfigValidationError(ConfigError):
-    class Context(FileContext):
-        pass
+    class Context(TypedDict):
+        loc: Location
 
     ctx: Context
+
+    @override
+    def format_message(self) -> str:
+        return "Validation failed for configuration file %r.\n\n%s" % (
+            str(self.ctx["loc"]["filename"]),
+            self.message,
+        )

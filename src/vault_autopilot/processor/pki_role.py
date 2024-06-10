@@ -1,8 +1,8 @@
 import logging
-from dataclasses import dataclass
 from collections.abc import Iterable
-from typing_extensions import override
+from dataclasses import dataclass
 
+from typing_extensions import override
 
 from .. import dto
 from ..dispatcher import event
@@ -12,18 +12,6 @@ from .abstract import ChainBasedProcessor
 from .issuer import IssuerFallbackNode
 
 logger = logging.getLogger(__name__)
-
-
-# APPLY_STATUS_EVENT_MAP: dict[
-#     ApplyResultStatus, Type[Union[event.PKIRoleApplySuccess, event.PKIRoleApplyError]]
-# ] = {
-#     "verify_success": event.PKIRoleVerifySuccess,
-#     "create_success": event.PKIRoleCreateSuccess,
-#     "update_success": event.PKIRoleUpdateSuccess,
-#     "verify_error": event.PKIRoleVerifyError,
-#     "create_error": event.PKIRoleCreateError,
-#     "update_error": event.PKIRoleUpdateError,
-# }
 
 
 @dataclass(slots=True)
@@ -39,32 +27,13 @@ class PKIRoleNode(AbstractNode):
         return cls(payload)
 
 
-# @dataclass(slots=True)
-# class PKIRoleFallbackNode(AbstractNode):
-#     node_hash: int
-#
-#     @override
-#     def __hash__(self) -> int:
-#         return self.node_hash
-#
-#     @classmethod
-#     def from_pki_role_absolute_path(cls, path: str) -> "PKIRoleFallbackNode":
-#         """
-#         Creates a new :class:`PKIRoleFallbackNode` instance from a PKI Role absolute
-#         path.
-#
-#         Args:
-#             path: The path must be in the format ``pki/my-role`` where ``pki`` is the
-#                 PKI engine mount path and ``my-role`` is the name of the role.
-#         """
-#         return cls(hash(path))
-
-
 NodeType = PKIRoleNode | IssuerFallbackNode
 
 
 @dataclass(slots=True)
-class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
+class PKIRoleApplyProcessor(
+    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
+):
     pki_role_svc: PKIRoleService
 
     @override
@@ -81,7 +50,9 @@ class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
 
     @override
     def initialize(self) -> None:
-        async def _on_pki_role_apply_requested(ev: event.PKIRoleApplyRequested) -> None:
+        async def _on_pki_role_apply_requested(
+            ev: event.PKIRoleApplicationRequested,
+        ) -> None:
             await self.schedule(PKIRoleNode.from_payload(ev.resource))
 
         async def _on_issuer_processed(ev: event.IssuerApplySuccess) -> None:
@@ -98,11 +69,11 @@ class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
                 )
             )
 
-        async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
+        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
             await self.flush_any_pending_downstreams()
 
         self.observer.register(
-            (event.PKIRoleApplyRequested,), _on_pki_role_apply_requested
+            (event.PKIRoleApplicationRequested,), _on_pki_role_apply_requested
         )
         self.observer.register(
             (
@@ -112,13 +83,13 @@ class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
             ),
             _on_issuer_processed,
         )
-        self.observer.register((event.PostProcessRequested,), _on_postprocess_requested)
+        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, PKIRoleNode)
 
-        await self.observer.trigger(event.PKIRoleApplyStarted(node.payload))
+        await self.observer.trigger(event.PKIRoleApplicationInitiated(node.payload))
 
         # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
         try:
@@ -127,6 +98,6 @@ class PKIRoleApplyProcessor(ChainBasedProcessor[NodeType]):
             await self.observer.trigger(event.PKIRoleCreateError(node.payload))
             raise
 
-        await self.observer.trigger(event.PKIRoleCreateSuccess(node.payload))
-
         logger.debug("applying finished %r", node.payload.absolute_path())
+
+        await self.observer.trigger(event.PKIRoleCreateSuccess(node.payload))

@@ -3,7 +3,7 @@ from typing import Literal
 from typing_extensions import TypedDict
 
 from .._pkg.asyva.dto import password_policy
-from . import abstract
+from .abstract import AbstractDTO
 
 
 class PasswordPolicySpec(TypedDict):
@@ -11,7 +11,7 @@ class PasswordPolicySpec(TypedDict):
     policy: password_policy.PasswordPolicy
 
 
-class PasswordPolicyApplyDTO(abstract.AbstractDTO):
+class PasswordPolicyApplyDTO(AbstractDTO):
     kind: Literal["PasswordPolicy"] = "PasswordPolicy"
     spec: PasswordPolicySpec
 

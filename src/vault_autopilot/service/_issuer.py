@@ -1,11 +1,10 @@
 import logging
 from dataclasses import dataclass
 
-from ..util.model import model_dump
-
 from .. import dto
 from .._pkg import asyva
 from .._pkg.asyva.manager.pki import GetResult
+from ..util.model import model_dump
 from . import abstract
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ class IssuerService:
 
     async def _create_intmd_issuer(self, payload: dto.IssuerApplyDTO) -> None:
         mount_path, certificate, chaining = (
-            payload.spec["secret_engine"],
+            payload.spec["secrets_engine"],
             payload.spec["certificate"],
             payload.spec.get("chaining"),
         )
@@ -63,7 +62,7 @@ class IssuerService:
         _ = await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
             issuer_name=payload.spec["name"],
-            mount_path=payload.spec["secret_engine"],
+            mount_path=payload.spec["secrets_engine"],
         )
 
     async def _create_root_issuer(self, payload: dto.IssuerApplyDTO) -> None:
@@ -71,7 +70,7 @@ class IssuerService:
 
         _ = await self.client.generate_root(
             issuer_name=spec["name"],
-            mount_path=spec["secret_engine"],
+            mount_path=spec["secrets_engine"],
             **model_dump(
                 spec["certificate"],
                 exclude={"add_basic_constraints"},
@@ -94,7 +93,7 @@ class IssuerService:
             result = await self.get(
                 dto.IssuerGetDTO(
                     issuer_ref=payload.spec["name"],
-                    mount_path=payload.spec["secret_engine"],
+                    mount_path=payload.spec["secrets_engine"],
                 )
             )
         except Exception as ex:

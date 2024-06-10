@@ -46,7 +46,7 @@ class BaseComposer:
 
         return aiohttp.ClientSession(
             base_url=self.base_url,
-            headers=self.compose_default_headers().update(headers),
+            headers=self.compose_default_headers() | headers,
             skip_auto_headers=self.skip_auto_headers,
             **kwargs,
         )

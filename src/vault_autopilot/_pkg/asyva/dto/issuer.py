@@ -1,6 +1,5 @@
-from typing import Annotated, Literal, NotRequired
+from typing import Literal, NotRequired
 
-import pydantic
 from typing_extensions import TypedDict
 
 IssuerType = Literal["root", "intermediate"]
@@ -50,7 +49,7 @@ class CommonFields(TypedDict):
 
 
 class KeyGenerationFields(TypedDict):
-    type_: Annotated[IssuerCertType, pydantic.Field(alias="type")]
+    type: IssuerCertType
     key_name: NotRequired[str]
     key_ref: NotRequired[str]
     key_type: NotRequired[KeyType]

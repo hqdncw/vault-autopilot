@@ -1,11 +1,10 @@
 import asyncio
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generic, TypeVar
-from collections.abc import Sequence, Coroutine
-
-from ..util.coro import create_task_limited
 
 from .. import dto, util
+from ..util.coro import create_task_limited
 
 T = TypeVar("T")
 
@@ -44,12 +43,12 @@ class EventObserver(Generic[T]):
 
 
 @dataclass(slots=True)
-class PasswordApplyRequested:
+class PasswordApplicationRequested:
     resource: dto.PasswordApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordApplyStarted:
+class PasswordApplicationInitiated:
     resource: dto.PasswordApplyDTO
 
 
@@ -84,12 +83,12 @@ class PasswordVerifyError:
 
 
 @dataclass(slots=True)
-class IssuerApplyRequested:
+class IssuerApplicationRequested:
     resource: dto.IssuerApplyDTO
 
 
 @dataclass(slots=True)
-class IssuerApplyStarted:
+class IssuerApplicationInitiated:
     resource: dto.IssuerApplyDTO
 
 
@@ -124,12 +123,12 @@ class IssuerVerifyError:
 
 
 @dataclass(slots=True)
-class PasswordPolicyApplyRequested:
+class PasswordPolicyApplicationRequested:
     resource: dto.PasswordPolicyApplyDTO
 
 
 @dataclass(slots=True)
-class PasswordPolicyApplyStarted:
+class PasswordPolicyApplicationInitiated:
     resource: dto.PasswordPolicyApplyDTO
 
 
@@ -164,12 +163,12 @@ class PasswordPolicyVerifySuccess:
 
 
 @dataclass(slots=True)
-class PKIRoleApplyRequested:
+class PKIRoleApplicationRequested:
     resource: dto.PKIRoleApplyDTO
 
 
 @dataclass(slots=True)
-class PKIRoleApplyStarted:
+class PKIRoleApplicationInitiated:
     resource: dto.PKIRoleApplyDTO
 
 
@@ -204,62 +203,108 @@ class PKIRoleVerifySuccess:
 
 
 @dataclass(slots=True)
-class PostProcessRequested:
+class SecretsEngineApplicationRequested:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineApplicationInitiated:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineCreateError:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineUpdateError:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineVerifyError:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineCreateSuccess:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineUpdateSuccess:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class SecretsEngineVerifySuccess:
+    resource: dto.SecretsEngineApplyDTO
+
+
+@dataclass(slots=True)
+class ShutdownRequested:
     """
-    Once all manifests have been applied, this event is triggered by the dispatcher,
-    allowing you to inspect resources that still have unfulfilled dependencies. This
-    might include situations where passwords are waiting for password policy applying
-    or intermediate issuers are waiting for upstream issuers to complete their applying.
+    Once all manifests have been applied, the dispatcher triggers this event to allow
+    the processors to shut down gracefully.
     """
 
 
-ResourceApplyRequested = (
-    PasswordApplyRequested
-    | IssuerApplyRequested
-    | PasswordPolicyApplyRequested
-    | PKIRoleApplyRequested
+ResourceApplicationRequested = (
+    PasswordApplicationRequested
+    | IssuerApplicationRequested
+    | PasswordPolicyApplicationRequested
+    | PKIRoleApplicationRequested
+    | SecretsEngineApplicationRequested
 )
-ResourceApplyStarted = (
-    PasswordApplyStarted
-    | IssuerApplyStarted
-    | PasswordPolicyApplyStarted
-    | PKIRoleApplyStarted
+ResourceApplicationInitiated = (
+    PasswordApplicationInitiated
+    | IssuerApplicationInitiated
+    | PasswordPolicyApplicationInitiated
+    | PKIRoleApplicationInitiated
+    | SecretsEngineApplicationInitiated
 )
 ResourceCreateError = (
     PasswordCreateError
     | IssuerCreateError
     | PKIRoleCreateError
     | PasswordPolicyCreateError
+    | SecretsEngineCreateError
 )
 ResourceUpdateError = (
     PasswordUpdateError
     | IssuerUpdateError
     | PKIRoleUpdateError
     | PasswordPolicyUpdateError
+    | SecretsEngineUpdateError
 )
 ResourceCreateSuccess = (
     PasswordCreateSuccess
     | IssuerCreateSuccess
     | PasswordPolicyCreateSuccess
     | PKIRoleCreateSuccess
+    | SecretsEngineCreateSuccess
 )
 ResourceUpdateSuccess = (
     PasswordUpdateSuccess
     | IssuerUpdateSuccess
     | PasswordPolicyUpdateSuccess
     | PKIRoleUpdateSuccess
+    | SecretsEngineUpdateSuccess
 )
 ResourceVerifySuccess = (
     PasswordVerifySuccess
     | IssuerVerifySuccess
     | PasswordPolicyVerifySuccess
     | PKIRoleVerifySuccess
+    | SecretsEngineVerifySuccess
 )
 ResourceVerifyError = (
     PasswordVerifyError
     | IssuerVerifyError
     | PasswordPolicyVerifyError
     | PKIRoleVerifyError
+    | SecretsEngineVerifyError
 )
 
 IssuerApplySuccess = IssuerCreateSuccess | IssuerUpdateSuccess | IssuerVerifySuccess
@@ -272,11 +317,16 @@ PasswordPolicyApplySuccess = (
     | PasswordPolicyVerifySuccess
 )
 PKIRoleApplySuccess = PKIRoleCreateSuccess | PKIRoleUpdateSuccess | PKIRoleVerifySuccess
+SecretsEngineApplySuccess = (
+    SecretsEngineCreateSuccess | SecretsEngineUpdateSuccess | SecretsEngineVerifySuccess
+)
+
 ResourceApplySuccess = (
     PasswordApplySuccess
     | IssuerApplySuccess
     | PasswordPolicyApplySuccess
     | PKIRoleApplySuccess
+    | SecretsEngineApplySuccess
 )
 
 IssuerApplyError = IssuerCreateError | IssuerUpdateError | IssuerVerifyError
@@ -285,14 +335,22 @@ PasswordPolicyApplyError = (
     PasswordPolicyCreateError | PasswordPolicyUpdateError | PasswordPolicyVerifyError
 )
 PKIRoleApplyError = PKIRoleCreateError | PKIRoleUpdateError | PKIRoleVerifyError
+SecretsEngineApplyError = (
+    SecretsEngineCreateError | SecretsEngineUpdateError | SecretsEngineVerifyError
+)
+
 ResourceApplyError = (
-    PasswordApplyError | IssuerApplyError | PasswordPolicyApplyError | PKIRoleApplyError
+    PasswordApplyError
+    | IssuerApplyError
+    | PasswordPolicyApplyError
+    | PKIRoleApplyError
+    | SecretsEngineApplyError
 )
 
 
 EventType = (
-    PasswordApplyRequested
-    | PasswordApplyStarted
+    PasswordApplicationRequested
+    | PasswordApplicationInitiated
     | PasswordCreateError
     | PasswordUpdateError
     | PasswordVerifyError
@@ -300,29 +358,37 @@ EventType = (
     | PasswordUpdateSuccess
     | PasswordVerifySuccess
     | PasswordVerifyError
-    | IssuerApplyRequested
-    | IssuerApplyStarted
+    | IssuerApplicationRequested
+    | IssuerApplicationInitiated
     | IssuerCreateError
     | IssuerUpdateError
     | IssuerVerifyError
     | IssuerCreateSuccess
     | IssuerUpdateSuccess
     | IssuerVerifySuccess
-    | PasswordPolicyApplyRequested
-    | PasswordPolicyApplyStarted
+    | PasswordPolicyApplicationRequested
+    | PasswordPolicyApplicationInitiated
     | PasswordPolicyCreateError
     | PasswordPolicyUpdateError
     | PasswordPolicyVerifyError
     | PasswordPolicyCreateSuccess
     | PasswordPolicyUpdateSuccess
     | PasswordPolicyVerifySuccess
-    | PKIRoleApplyRequested
-    | PKIRoleApplyStarted
+    | PKIRoleApplicationRequested
+    | PKIRoleApplicationInitiated
     | PKIRoleCreateError
     | PKIRoleUpdateError
     | PKIRoleVerifyError
     | PKIRoleCreateSuccess
     | PKIRoleUpdateSuccess
     | PKIRoleVerifySuccess
-    | PostProcessRequested
+    | SecretsEngineApplicationRequested
+    | SecretsEngineApplicationInitiated
+    | SecretsEngineCreateError
+    | SecretsEngineUpdateError
+    | SecretsEngineVerifyError
+    | SecretsEngineCreateSuccess
+    | SecretsEngineUpdateSuccess
+    | SecretsEngineVerifySuccess
+    | ShutdownRequested
 )

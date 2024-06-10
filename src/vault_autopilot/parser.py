@@ -1,52 +1,84 @@
 import asyncio
 import logging
 import pathlib
-from dataclasses import dataclass
-from typing import IO
 from collections.abc import Generator, Iterator
-from typing import Any
+from dataclasses import dataclass
+from typing import IO, Any, Generic, TypeVar
 
-import pydantic
-import pydantic.alias_generators
 import ruamel.yaml as yaml
+from pydantic import ConfigDict, RootModel, ValidationError
+from pydantic.alias_generators import to_camel
 from ruamel.yaml.error import YAMLError
 
-from .exc import ManifestSyntaxError
+from vault_autopilot.exc import ManifestSyntaxError, ManifestValidationError
 
-from . import dto, util
+from . import util
 
-__all__ = ("QueueType", "ManifestParser")
+__all__ = ("ManifestParser",)
 
-
-QueueType = asyncio.Queue[dto.DTO | None]
+T = TypeVar("T", bound="AbstractManifestObject")  # type: ignore
 
 logger = logging.getLogger(__name__)
-
-KIND_SCHEMA_MAP: dict[str, type[dto.DTO]] = {
-    "Password": dto.PasswordApplyDTO,
-    "Issuer": dto.IssuerApplyDTO,
-    "PasswordPolicy": dto.PasswordPolicyApplyDTO,
-    "PKIRole": dto.PKIRoleApplyDTO,
-}
-
 loader = yaml.YAML(typ="rt")
 
 
+class AbstractManifestObject(RootModel[T]):
+    model_config = ConfigDict(alias_generator=to_camel)
+
+    root: Any
+
+
 @dataclass(slots=True)
-class ManifestParser:
+class ManifestParser(Generic[T]):
     """
-    Processes YAML manifests obtained from the `manifest_iterator`, extracting data and
-    creating DTO objects before placing them in a FIFO queue.
+    A generic parser for manifest files.
+
+    This class provides a generic implementation for parsing manifest files and
+    converting them into specific object types. It utilizes an iterator to process
+    multiple manifest files and a queue to manage the parsed objects.
+
+    Attributes:
+        manifest_iterator: An iterator yielding open file objects containing the
+            manifest data in bytes.
+        object_builder: The class type of the desired output objects.
+        queue: A queue to store the parsed objects.
+
+    Raises:
+        ManifestSyntaxError: Raised when there is a syntax error in the manifest file.
+        ManifestValidationError: Raised when the parsed data fails model validation.
+
+    Example::
+
+        import asyncio
+        from vault_autopilot.parser import AbstractManifestObject, ManifestParser
+
+        # Define your manifest files and object class
+        manifest_files = [open("/path/to/file", "rb")]
+        MyObject = AbstractManifestObject
+
+        # Create a ManifestParser instance
+        parser = ManifestParser[MyObject](
+            manifest_iterator=iter(manifest_files),
+            object_builder=MyObject,
+            queue=asyncio.Queue(),
+        )
+
+        # Start parsing and processing the manifest files
+        await parser.execute()
+
+        # Access the parsed objects from the queue
+        print(await parser.queue.get())
     """
 
     # TODO: Implement a file-based queue modeled after
     #  tempfile.SpooledTemporaryFile to efficiently manage large datasets while
     #  avoiding memory overflow.
 
-    queue: "QueueType"
     manifest_iterator: Iterator[IO[bytes]]
+    object_builder: type[T]
+    queue: asyncio.Queue[T | None]
 
-    async def execute(self) -> "QueueType":
+    async def execute(self) -> asyncio.Queue[T | None]:
         logger.debug("parsing files")
 
         def stream_documents(buf: IO[bytes]) -> Generator[Any, Any, Any]:
@@ -65,38 +97,19 @@ class ManifestParser:
                     ) from ex
                 except StopIteration:
                     break
-                else:
-                    ctx = ManifestSyntaxError.Context(
-                        loc={"filename": pathlib.Path(fn)}
+
+                try:
+                    payload = self.object_builder.model_validate(payload)
+                except ValidationError as ex:
+                    raise ManifestValidationError(
+                        str(util.model.convert_errors(ex)),
+                        ManifestValidationError.Context(
+                            loc={"filename": pathlib.Path(fn)}
+                        ),
                     )
 
-                    if (
-                        not isinstance(payload, dict)
-                        or (kind := payload.get("kind")) is None
-                    ):
-                        raise ManifestSyntaxError(
-                            "Mapping 'kind' is missing in %r" % payload,
-                            ctx,
-                        )
-
-                    if kind in KIND_SCHEMA_MAP.keys():
-                        schema = KIND_SCHEMA_MAP[kind]
-                    else:
-                        raise ManifestSyntaxError(
-                            "Unsupported kind %r. Supported object kinds include: %s"
-                            % (kind, tuple(KIND_SCHEMA_MAP.keys())),
-                            ctx,
-                        )
-
-                    try:
-                        payload = schema.model_validate(payload)
-                    except pydantic.ValidationError as ex:
-                        raise ManifestSyntaxError(
-                            str(util.model.convert_errors(ex)), ctx
-                        )
-
-                    logger.debug("put %r", payload)
-                    await self.queue.put(payload)
+                logger.debug("parsed %r", payload)
+                await self.queue.put(payload)
 
         logger.debug("parsed files successfully")
         await self.queue.put(None)

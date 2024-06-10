@@ -1,12 +1,8 @@
 import http
-import logging
 from typing import cast
 
-from .. import exc
+from ..exc import PasswordPolicyNotFoundError, VaultAPIError
 from . import base
-
-logger = logging.getLogger(__name__)
-
 
 BASE_PATH = "/v1/sys/policies/password"
 
@@ -22,8 +18,7 @@ class PasswordPolicyManager(base.BaseManager):
         if resp.status == http.HTTPStatus.NO_CONTENT:
             return
 
-        logger.debug(await resp.json())
-        raise await exc.VaultAPIError.from_response(
+        raise await VaultAPIError.from_response(
             "Failed to create password policy", resp
         )
 
@@ -35,13 +30,14 @@ class PasswordPolicyManager(base.BaseManager):
         if resp.status == http.HTTPStatus.OK:
             return cast(str, resp_body["data"]["password"])
         elif resp.status == http.HTTPStatus.NOT_FOUND:
-            raise exc.PasswordPolicyNotFoundError(
-                "Failed to generate a password, password policy {policy_name!r} not \
-                found",
-                policy_name=policy_path,
+            raise PasswordPolicyNotFoundError(
+                "Failed to generate a password, password policy "
+                "{ctx[path]!r} not found",
+                ctx=PasswordPolicyNotFoundError.Context(
+                    **await VaultAPIError.compose_context(resp),
+                    path=policy_path,
+                    mount_path=BASE_PATH,
+                ),
             )
 
-        logger.debug(resp_body)
-        raise await exc.VaultAPIError.from_response(
-            "Failed to generate a password", resp
-        )
+        raise await VaultAPIError.from_response("Failed to generate a password", resp)

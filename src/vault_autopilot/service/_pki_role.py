@@ -13,6 +13,6 @@ class PKIRoleService:
     async def update_or_create(self, payload: dto.PKIRoleApplyDTO) -> None:
         await self.client.update_or_create_pki_role(
             name=payload.spec["name"],
-            mount_path=payload.spec["secret_engine"],
+            mount_path=payload.spec["secrets_engine"],
             **model_dump(payload.spec["role"]),
         )

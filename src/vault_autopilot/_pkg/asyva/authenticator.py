@@ -4,10 +4,10 @@ import logging
 import pathlib
 from dataclasses import dataclass
 from typing import Literal
-from typing_extensions import override
 
 import aiohttp
 import pydantic
+from typing_extensions import override
 
 from . import constants, exc
 
@@ -82,9 +82,8 @@ class TokenAuthenticator(AbstractAuthenticator):
                 token = read_jwt(self.token.get_secret_value())
             case _:
                 raise NotImplementedError(
-                    "Invalid token source specified: %r. Supported sources include \
-                    'directvalue' and `'filebasedvalue'."
-                    % self.source
+                    "Invalid token source specified: %r. Supported sources include "
+                    "'directvalue' and `'filebasedvalue'." % self.source
                 )
 
         resp = await sess.get(
@@ -97,8 +96,9 @@ class TokenAuthenticator(AbstractAuthenticator):
                 return self.token
             case http.HTTPStatus.FORBIDDEN:
                 raise exc.UnauthorizedError(
-                    "The token you provided is invalid or has expired. Please ensure \
-                    that your Vault credentials are correct and try again."
+                    "The token you provided is invalid or has expired. Please "
+                    "ensure that your Vault credentials are correct and try again.",
+                    {},
                 )
             case _:
                 pass

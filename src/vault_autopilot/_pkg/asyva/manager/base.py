@@ -1,7 +1,7 @@
 import contextlib
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from typing import Any, Self
-from collections.abc import AsyncGenerator
 
 import aiohttp
 from pydantic import BaseModel

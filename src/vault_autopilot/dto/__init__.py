@@ -4,6 +4,7 @@ from .issuer import IssuerApplyDTO, IssuerGetDTO
 from .password import PasswordApplyDTO
 from .password_policy import PasswordPolicyApplyDTO
 from .pki_role import PKIRoleApplyDTO
+from .secrets_engine import SecretsEngineApplyDTO
 
 DTO = Union[
     IssuerApplyDTO,
@@ -11,14 +12,13 @@ DTO = Union[
     PasswordPolicyApplyDTO,
     PKIRoleApplyDTO,
 ]
-VersionedSecretApplyDTO = PasswordApplyDTO
 
 __all__ = (
     "DTO",
-    "VersionedSecretApplyDTO",
     "IssuerApplyDTO",
     "IssuerGetDTO",
     "PasswordApplyDTO",
     "PasswordPolicyApplyDTO",
     "PKIRoleApplyDTO",
+    "SecretsEngineApplyDTO",
 )

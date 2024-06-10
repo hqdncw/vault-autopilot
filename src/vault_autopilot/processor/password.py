@@ -1,14 +1,14 @@
 import logging
 from dataclasses import dataclass
 from typing import Iterable
-from typing_extensions import override
 
+from typing_extensions import override
 
 from .. import dto, util
 from ..dispatcher import event
-from ..service.abstract import ApplyResult, ApplyResultStatus
 from ..service import PasswordService
-from . import abstract
+from ..service.abstract import ApplyResult, ApplyResultStatus
+from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
 
 logger = logging.getLogger(__name__)
 
@@ -52,11 +52,13 @@ class PasswordPolicyFallbackNode(util.dependency_chain.AbstractNode):
         return cls(hash(path))
 
 
-NodeType = PasswordNode | PasswordPolicyFallbackNode
+NodeType = PasswordNode | PasswordPolicyFallbackNode | SecretsEngineFallbackNode
 
 
 @dataclass(slots=True)
-class PasswordApplyProcessor(abstract.ChainBasedProcessor[NodeType]):
+class PasswordApplyProcessor(
+    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
+):
     pwd_svc: PasswordService
 
     @override
@@ -65,12 +67,17 @@ class PasswordApplyProcessor(abstract.ChainBasedProcessor[NodeType]):
     ) -> Iterable[NodeType]:
         assert isinstance(node, PasswordNode)
 
-        return (PasswordPolicyFallbackNode.from_path(node.payload.spec["path"]),)
+        return (
+            PasswordPolicyFallbackNode.from_path(node.payload.spec["path"]),
+            SecretsEngineFallbackNode.from_absolute_path(
+                node.payload.spec["secrets_engine"]
+            ),
+        )
 
     @override
     def initialize(self) -> None:
         async def _on_password_apply_requested(
-            ev: event.PasswordApplyRequested,
+            ev: event.PasswordApplicationRequested,
         ) -> None:
             await self.schedule(PasswordNode.from_payload(ev.resource))
 
@@ -88,11 +95,11 @@ class PasswordApplyProcessor(abstract.ChainBasedProcessor[NodeType]):
                 PasswordPolicyFallbackNode.from_path(ev.resource.absolute_path())
             )
 
-        async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
+        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
             await self.flush_any_pending_downstreams()
 
         self.observer.register(
-            (event.PasswordApplyRequested,),
+            (event.PasswordApplicationRequested,),
             _on_password_apply_requested,
         )
         self.observer.register(
@@ -103,13 +110,13 @@ class PasswordApplyProcessor(abstract.ChainBasedProcessor[NodeType]):
             ),
             _on_password_policy_processed,
         )
-        self.observer.register((event.PostProcessRequested,), _on_postprocess_requested)
+        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, PasswordNode)
 
-        await self.observer.trigger(event.PasswordApplyRequested(node.payload))
+        await self.observer.trigger(event.PasswordApplicationRequested(node.payload))
 
         try:
             result = await self.pwd_svc.apply(node.payload)
@@ -124,3 +131,5 @@ class PasswordApplyProcessor(abstract.ChainBasedProcessor[NodeType]):
             raise ExceptionGroup("Failed to apply password", errors)
 
         logger.debug("applying finished %r", node.payload.absolute_path())
+
+        await self.observer.trigger(event.PasswordCreateSuccess(node.payload))

@@ -1,15 +1,15 @@
 import logging
 from dataclasses import dataclass, field
 from typing import Iterable
-from typing_extensions import override
 
-from ..util.dependency_chain import AbstractNode, FallbackNode
+from typing_extensions import override
 
 from .. import dto
 from ..dispatcher import event
-from ..service.abstract import ApplyResult, ApplyResultStatus
 from ..service import IssuerService
-from .abstract import ChainBasedProcessor
+from ..service.abstract import ApplyResult, ApplyResultStatus
+from ..util.dependency_chain import AbstractNode, DependencyStatus, FallbackNode
+from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +29,9 @@ STATUS_EVENT_MAPPING: dict[
 @dataclass(slots=True)
 class IssuerNode(AbstractNode):
     payload: dto.IssuerApplyDTO = field(repr=False)
+
+    def __repr__(self) -> str:
+        return f"IssuerNode({hash(self)})"
 
     @override
     def __hash__(self) -> int:
@@ -61,12 +64,18 @@ class IssuerFallbackNode(FallbackNode):
         """
         return cls(hash(path))
 
+    @override
+    def __hash__(self) -> int:
+        return self.node_hash
 
-NodeType = IssuerNode | IssuerFallbackNode
+
+NodeType = IssuerNode | IssuerFallbackNode | SecretsEngineFallbackNode
 
 
 @dataclass(slots=True)
-class IssuerApplyProcessor(ChainBasedProcessor[NodeType]):
+class IssuerApplyProcessor(
+    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
+):
     iss_svc: IssuerService
 
     @override
@@ -84,26 +93,65 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType]):
                 ),
             )
 
-        return ()
+        return (
+            SecretsEngineFallbackNode.from_absolute_path(
+                node.payload.spec["secrets_engine"]
+            ),
+        )
 
     @override
     def initialize(self) -> None:
-        async def _on_issuer_apply_requested(ev: event.IssuerApplyRequested) -> None:
+        async def _on_issuer_apply_requested(
+            ev: event.IssuerApplicationRequested,
+        ) -> None:
             await self.schedule(IssuerNode.from_payload(ev.resource))
 
-        async def _on_postprocess_requested(_: event.PostProcessRequested) -> None:
+        async def _on_secrets_engine_apply_success(
+            ev: event.SecretsEngineApplySuccess,
+        ) -> None:
+            upstream, downstreams_to_flush = (
+                SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"]),
+                [],
+            )
+
+            async with self.dep_chain.lock() as mgr:
+                if not mgr.has_node(upstream):
+                    return
+
+                for downstream in mgr.filter_downstreams(upstream, lambda _: True):
+                    status: DependencyStatus
+
+                    if isinstance(downstream, IssuerNode):
+                        status = "in_progress"
+                        downstreams_to_flush.append(downstream)
+                    else:
+                        status = "satisfied"
+
+                    mgr.update_edge_status(upstream, downstream, status=status)
+
+            await self.flush_downstreams(upstream, downstreams_to_flush)
+
+        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
             await self.flush_any_pending_downstreams()
 
         self.observer.register(
-            (event.IssuerApplyRequested,), _on_issuer_apply_requested
+            (event.IssuerApplicationRequested,), _on_issuer_apply_requested
         )
-        self.observer.register((event.PostProcessRequested,), _on_postprocess_requested)
+        self.observer.register(
+            (
+                event.SecretsEngineCreateSuccess,
+                event.SecretsEngineUpdateSuccess,
+                event.SecretsEngineVerifySuccess,
+            ),
+            _on_secrets_engine_apply_success,
+        )
+        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, IssuerNode)
 
-        await self.observer.trigger(event.IssuerApplyStarted(node.payload))
+        await self.observer.trigger(event.IssuerApplicationInitiated(node.payload))
 
         try:
             result = await self.iss_svc.apply(node.payload)

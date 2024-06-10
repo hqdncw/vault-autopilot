@@ -1,25 +1,39 @@
 import abc
 import logging
 from asyncio import Semaphore, TaskGroup
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import groupby
 from typing import Generic, Iterable, TypeVar
-from ironfence import Mutex
-from ..dispatcher.event import EventObserver, EventType
-from .._pkg import asyva
 
+from ironfence import Mutex
+from typing_extensions import override
+
+from .._pkg import asyva
 from ..util.coro import create_task_limited
-from ..util.dependency_chain import DependencyChain
+from ..util.dependency_chain import DependencyChain, FallbackNode
 
 T = TypeVar("T")
+P = TypeVar("P")
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class AbstractProcessor(abc.ABC):
+class SecretsEngineFallbackNode(FallbackNode):
+    @classmethod
+    def from_absolute_path(cls, path: str) -> "SecretsEngineFallbackNode":
+        return cls(node_hash=hash(path))
+
+    @override
+    def __hash__(self) -> int:
+        return self.node_hash
+
+
+@dataclass(slots=True)
+class AbstractProcessor(abc.ABC, Generic[T]):
     client: asyva.Client
-    observer: EventObserver[EventType]
+    observer: T
     sem: Semaphore
 
     @abc.abstractmethod
@@ -27,7 +41,7 @@ class AbstractProcessor(abc.ABC):
 
 
 @dataclass(slots=True)
-class ChainBasedProcessor(AbstractProcessor, Generic[T]):
+class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
     dep_chain: Mutex[DependencyChain[T]]
 
     @abc.abstractmethod
@@ -60,8 +74,7 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
         """
 
     @abc.abstractmethod
-    async def _flush(self, node: T) -> None:
-        ...
+    async def _flush(self, node: T) -> None: ...
 
     async def schedule(self, node: T) -> None:
         """
@@ -82,18 +95,17 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
         Returns:
             None
         """
-        async with self.dep_chain.lock() as mgr:
-            if mgr.has_node(node):
-                # TODO: handle duplicates in a more user-friendly way
-                raise RuntimeError("Duplicates aren't allowed", node)
-
         if upstream_fbs := await self._build_fallback_upstream_nodes(node):
             async with self.dep_chain.lock() as mgr:
+                mgr.add_node(node)
+
                 for upstream in upstream_fbs:
-                    assert not mgr.has_edge(upstream, node), "Unexpected behavior"
+                    if not mgr.has_node(upstream):
+                        mgr.add_node(upstream)
+
                     mgr.add_edge(upstream, node, "pending")
 
-            if mgr.are_inbound_edges_satisfied(node, default=False) is not True:
+            if not mgr.are_inbound_edges_satisfied(node):
                 return
 
             await self._flush(node)
@@ -133,37 +145,42 @@ class ChainBasedProcessor(AbstractProcessor, Generic[T]):
 
         async with self.dep_chain.lock() as mgr:
             for downstream in (
-                downstream_list := tuple(
+                downstream_bunch := tuple(
                     mgr.filter_downstreams(
                         node,
-                        function=lambda nbr: mgr.are_inbound_edges_satisfied(
+                        function=lambda nbr: mgr.get_edge_status(node, nbr)
+                        != "satisfied"
+                        and mgr.are_inbound_edges_satisfied(
                             nbr,
                             exclude=lambda edge: edge[0] == hash(node),
-                            default=True,
                         ),
                     )
                 )
             ):
                 mgr.update_edge_status(node, downstream, status="in_progress")
 
-        if downstream_list:
-            async with TaskGroup() as tg:
-                for downstream in downstream_list:
-                    await self._flush_limited(tg, downstream)
+        if downstream_bunch:
+            await self.flush_downstreams(node, downstream_bunch)
         else:
             logger.debug(
                 "[%s] no pending downstreams were found for node %r, flushing aborted",
                 self.__class__.__name__,
                 hash(node),
             )
-            return
+
+    async def flush_downstreams(
+        self, upstream: T, downstream_bunch: Sequence[T]
+    ) -> None:
+        async with TaskGroup() as tg:
+            for downstream in downstream_bunch:
+                await self._flush_limited(tg, downstream)
 
         async with self.dep_chain.lock() as mgr:
-            for downstream in downstream_list:
+            for downstream in downstream_bunch:
                 for upstream in mgr.filter_upstreams(downstream, lambda _: True):
                     mgr.update_edge_status(upstream, downstream, status="satisfied")
 
-        for downstream in downstream_list:
+        for downstream in downstream_bunch:
             await self.flush_pending_downstreams_for(downstream)
 
     async def flush_any_pending_downstreams(self) -> None:

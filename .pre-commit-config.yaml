@@ -17,27 +17,31 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/charliermarsh/ruff-pre-commit
-    rev: v0.4.2
+    rev: v0.4.8
     hooks:
-    - id: ruff
+      # Run the linter.
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        additional_dependencies:
-          - "click~=8.1.7"
-          - "pydantic~=2.7.1"
-          - "ruamel.yaml~=0.18.5"
-          - "humanize~=4.9.0"
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.10.0
+  #   hooks:
+  #     - id: mypy
+  #       additional_dependencies:
+  #         - "click~=8.1.7"
+  #         - "pydantic~=2.7.1"
+  #         - "ruamel.yaml~=0.18.5"
+  #         - "humanize~=4.9.0"
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.6
+    rev: v2.3.0
     hooks:
       - id: codespell
         additional_dependencies: ["tomli"]
 
   - repo: https://github.com/DetachHead/basedpyright
-    rev: v1.11.0
+    rev: v1.12.5
     hooks:
       - id: basedpyright
