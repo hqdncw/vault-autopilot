@@ -3,7 +3,6 @@ import logging
 from asyncio import Semaphore, TaskGroup
 from collections.abc import Sequence
 from dataclasses import dataclass
-from itertools import groupby
 from typing import Generic, Iterable, TypeVar
 
 from ironfence import Mutex
@@ -103,23 +102,15 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
                     if not mgr.has_node(upstream):
                         mgr.add_node(upstream)
 
-                    mgr.add_edge(upstream, node, "pending")
+                    mgr.add_edge(upstream, node)
 
-            if not mgr.are_inbound_edges_satisfied(node):
+            if not mgr.are_upstreams_satisfied(node):
                 return
-
-            await self._flush(node)
-
-            async with self.dep_chain.lock() as mgr:
-                for upstream in upstream_fbs:
-                    mgr.update_edge_status(upstream, node, status="satisfied")
         else:
             async with self.dep_chain.lock() as mgr:
                 _ = mgr.add_node(node)
 
-            await self._flush(node)
-
-        await self.flush_pending_downstreams_for(node)
+        await self.flush_nodes((node,))
 
         # TODO: replace flushed nodes by fallback nodes to reduce memory consumption.
 
@@ -148,19 +139,15 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
                 downstream_bunch := tuple(
                     mgr.filter_downstreams(
                         node,
-                        function=lambda nbr: mgr.get_edge_status(node, nbr)
-                        != "satisfied"
-                        and mgr.are_inbound_edges_satisfied(
-                            nbr,
-                            exclude=lambda edge: edge[0] == hash(node),
-                        ),
+                        function=lambda nbr: mgr.get_node_status(nbr) == "pending"
+                        and mgr.are_upstreams_satisfied(nbr),
                     )
                 )
             ):
-                mgr.update_edge_status(node, downstream, status="in_progress")
+                mgr.set_node_status(downstream, status="in_progress")
 
         if downstream_bunch:
-            await self.flush_downstreams(node, downstream_bunch)
+            await self.flush_nodes(downstream_bunch)
         else:
             logger.debug(
                 "[%s] no pending downstreams were found for node %r, flushing aborted",
@@ -168,42 +155,18 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
                 hash(node),
             )
 
-    async def flush_downstreams(
-        self, upstream: T, downstream_bunch: Sequence[T]
-    ) -> None:
+    async def flush_nodes(self, node_bunch: Sequence[T]) -> None:
         async with TaskGroup() as tg:
-            for downstream in downstream_bunch:
-                await self._flush_limited(tg, downstream)
+            for node in node_bunch:
+                logger.debug("creating task for flushing node %s", node)
+                await create_task_limited(tg, self.sem, self._flush(node))
 
         async with self.dep_chain.lock() as mgr:
-            for downstream in downstream_bunch:
-                for upstream in mgr.filter_upstreams(downstream, lambda _: True):
-                    mgr.update_edge_status(upstream, downstream, status="satisfied")
-
-        for downstream in downstream_bunch:
-            await self.flush_pending_downstreams_for(downstream)
-
-    async def flush_any_pending_downstreams(self) -> None:
-        """Flushes any pending downstreams in the dependency chain."""
-
-        logger.debug("[%s] flushing any pending downstreams", self.__class__.__name__)
-
-        async with self.dep_chain.lock() as mgr:
-            edges = tuple(mgr.get_pending_edges())
-
-            for upstream, downstream in edges:
-                mgr.update_edge_status(upstream, downstream, status="in_progress")
+            for node in node_bunch:
+                mgr.set_node_status(node, status="satisfied")
 
         async with TaskGroup() as tg:
-            for upstream, edge_batch in groupby(edges, key=lambda t: t[0]):
-                for edge in edge_batch:
-                    logger.debug("flushing downstream %r", edge)
-                    await self._flush_limited(tg, edge[1])
-
-        async with self.dep_chain.lock() as mgr:
-            for upstream, downstream in edges:
-                mgr.update_edge_status(upstream, downstream, status="satisfied")
-
-    async def _flush_limited(self, tg: TaskGroup, node: T) -> None:
-        logger.debug("creating task for flushing node %s", node)
-        await create_task_limited(tg, self.sem, self._flush(node))
+            for node in node_bunch:
+                await create_task_limited(
+                    tg, self.sem, self.flush_pending_downstreams_for(node)
+                )

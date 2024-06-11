@@ -8,7 +8,7 @@ from .. import dto
 from ..dispatcher import event
 from ..service import IssuerService
 from ..service.abstract import ApplyResult, ApplyResultStatus
-from ..util.dependency_chain import AbstractNode, DependencyStatus, FallbackNode
+from ..util.dependency_chain import AbstractNode, FallbackNode
 from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
 
 logger = logging.getLogger(__name__)
@@ -109,30 +109,26 @@ class IssuerApplyProcessor(
         async def _on_secrets_engine_apply_success(
             ev: event.SecretsEngineApplySuccess,
         ) -> None:
-            upstream, downstreams_to_flush = (
+            se_node, downstreams_to_flush = (
                 SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"]),
                 [],
             )
 
             async with self.dep_chain.lock() as mgr:
-                if not mgr.has_node(upstream):
+                if not mgr.has_node(se_node):
+                    mgr.add_node(se_node)
+                    mgr.set_node_status(se_node, "satisfied")
                     return
 
-                for downstream in mgr.filter_downstreams(upstream, lambda _: True):
-                    status: DependencyStatus
+                mgr.set_node_status(se_node, "satisfied")
 
-                    if isinstance(downstream, IssuerNode):
-                        status = "in_progress"
-                        downstreams_to_flush.append(downstream)
-                    else:
-                        status = "satisfied"
+                for downstream in mgr.filter_downstreams(
+                    se_node, lambda node: isinstance(node, IssuerNode)
+                ):
+                    downstreams_to_flush.append(downstream)
+                    mgr.set_node_status(downstream, status="in_progress")
 
-                    mgr.update_edge_status(upstream, downstream, status=status)
-
-            await self.flush_downstreams(upstream, downstreams_to_flush)
-
-        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
-            await self.flush_any_pending_downstreams()
+            await self.flush_nodes(downstreams_to_flush)
 
         self.observer.register(
             (event.IssuerApplicationRequested,), _on_issuer_apply_requested
@@ -145,7 +141,6 @@ class IssuerApplyProcessor(
             ),
             _on_secrets_engine_apply_success,
         )
-        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:

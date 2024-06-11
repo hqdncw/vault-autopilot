@@ -11,7 +11,7 @@ from typing import (
     TypeVar,
 )
 
-from networkx import DiGraph, set_node_attributes
+from networkx import DiGraph, get_node_attributes, set_node_attributes
 from typing_extensions import override
 
 T = TypeVar("T")
@@ -100,23 +100,23 @@ class DependencyChain(Generic[T]):
     def _raise_edge_not_found_exc(u: int, v: int) -> NoReturn:
         raise ValueError("Edge not found (u: %r, v: %r)" % (hash(u), hash(v)))
 
-    @staticmethod
-    def _is_pending(edge: tuple[int, int, _EdgeAttrs]) -> bool:
-        return edge[2]["status"] == "pending"
-
-    @staticmethod
-    def _is_satisfied(edge: tuple[int, int, _EdgeAttrs]) -> bool:
-        return edge[2]["status"] == "satisfied"
-
-    def _get_edge_data(self, u: int, v: int) -> _EdgeAttrs:
-        return self._graph[u][v]  # pyright: ignore[reportReturnType]
-
     def _get_node_payload(self, node_hash: int) -> T:
         return self._graph.nodes[node_hash]["payload"]
 
+    def get_node_status_by_hash(self, node: int) -> DependencyStatus:
+        return get_node_attributes(self._graph, "status", default="pending")[node]  # type: ignore[reportReturnType]
+
+    def set_node_status_by_hash(self, node: int, status: DependencyStatus) -> None:
+        return set_node_attributes(self._graph, {node: {"status": status}})
+
+    def get_node_status(self, node: T) -> DependencyStatus:
+        return self.get_node_status_by_hash(hash(node))
+
+    def set_node_status(self, node: T, status: DependencyStatus) -> None:
+        return self.set_node_status_by_hash(hash(node), status)
+
     def add_node(self, node: T) -> int:
         node_hash = hash(node)
-
         self._graph.add_node(node_hash, payload=node)
         logger.debug("added node %r", node)
         return node_hash
@@ -153,14 +153,14 @@ class DependencyChain(Generic[T]):
         self,
         u: T,
         v: T,
-        status: DependencyStatus = "pending",
-    ) -> None:
+    ) -> tuple[int, int]:
         """
         Adds an edge from u to v, indicating that v depends on u.
         """
         u_hash, v_hash = hash(u), hash(v)
-        self._graph.add_edge(u_hash, v_hash, status=status)  # pyright: ignore[reportUnknownMemberType]
+        self._graph.add_edge(u_hash, v_hash)  # pyright: ignore[reportUnknownMemberType]
         logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
+        return u_hash, v_hash
 
     def has_node(self, node: T) -> bool:
         return self._graph.has_node(hash(node))
@@ -168,53 +168,34 @@ class DependencyChain(Generic[T]):
     def has_edge(self, u: T, v: T) -> bool:
         return self._graph.has_edge(hash(u), hash(v))
 
-    def update_edge_status(self, u: T, v: T, status: DependencyStatus) -> None:
-        u_hash, v_hash = hash(u), hash(v)
-        try:
-            self._graph[u_hash][v_hash]["status"] = status  # pyright: ignore[reportArgumentType]
-        except IndexError:
-            self._raise_edge_not_found_exc(u_hash, v_hash)
-
-    def get_edge_status(self, u: T, v: T) -> DependencyStatus:
-        u_hash, v_hash = hash(u), hash(v)
-        try:
-            data = self._get_edge_data(u_hash, v_hash)
-        except IndexError:
-            self._raise_edge_not_found_exc(u_hash, v_hash)
-        return data["status"]
-
-    def are_inbound_edges_satisfied(
+    def are_upstreams_satisfied(
         self,
         node: T,
-        exclude: Callable[[tuple[int, int]], bool] = lambda _: False,
+        exclude: Callable[[int], bool] = lambda _: False,
     ) -> bool:
         """
-        Checks if all inbound edges of a given node have their status satisfied.
+        Checks if all upstreams of a given node have their status satisfied.
 
         Args:
-            default: The value to return if the node has no inbound edges.
-            exclude: A callable that takes a tuple of adjacent nodes (representing a
-                     dependency) and returns a boolean. If True, the edge will be
-                     excluded from the check.
+            default: The value to return if the node has no upstreams.
+            exclude: A function to exclude certain upstreams from the check. Defaults to
+                a function that excludes none.
 
         Returns:
-            True if all inbound edges are satisfied, False otherwise.
+            True if all upstreams are satisfied, False otherwise.
         """
 
-        return (
-            id(
-                next(
-                    filter(
-                        lambda edge: False  # type: ignore[arg-type]
-                        if exclude(edge[:2])  # type: ignore[index]
-                        else not self._is_satisfied(edge),  # type: ignore[arg-type]
-                        self._graph.in_edges(hash(node), data=True),
-                    ),
-                    default_obj,
-                )
+        return id(
+            next(
+                filter(
+                    lambda edge: False
+                    if exclude(edge[0])
+                    else self.get_node_status_by_hash(edge[0]) != "satisfied",
+                    self._graph.in_edges(hash(node)),
+                ),
+                default_obj,
             )
-            == id(default_obj)
-        )
+        ) == id(default_obj)
 
     def filter_upstreams(self, node: T, function: Callable[[T], bool]) -> Iterator[T]:
         """
@@ -258,7 +239,7 @@ class DependencyChain(Generic[T]):
                 self._get_node_payload(edge[1]),
             ),
             filter(  # pyright: ignore[reportCallIssue]
-                lambda edge: self._is_pending(edge),  # pyright: ignore[reportArgumentType]
+                lambda edge: self.get_node_status_by_hash(edge[0]) == "pending",  # pyright: ignore[reportIndexIssue]
                 self._graph.in_edges(data=True, default={}),  # pyright: ignore[reportArgumentType, reportCallIssue]
             ),
         )

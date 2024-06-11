@@ -84,19 +84,15 @@ class PasswordApplyProcessor(
         async def _on_password_policy_processed(
             ev: event.PasswordPolicyApplySuccess,
         ) -> None:
+            policy_node = PasswordPolicyFallbackNode.from_path(
+                ev.resource.absolute_path()
+            )
+
             async with self.dep_chain.lock() as mgr:
-                policy_node = PasswordPolicyFallbackNode.from_path(
-                    ev.resource.spec["path"]
-                )
                 if not mgr.has_node(policy_node):
                     _ = mgr.add_node(policy_node)
 
-            await self.flush_pending_downstreams_for(
-                PasswordPolicyFallbackNode.from_path(ev.resource.absolute_path())
-            )
-
-        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
-            await self.flush_any_pending_downstreams()
+            await self.flush_pending_downstreams_for(policy_node)
 
         self.observer.register(
             (event.PasswordApplicationRequested,),
@@ -110,7 +106,6 @@ class PasswordApplyProcessor(
             ),
             _on_password_policy_processed,
         )
-        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:

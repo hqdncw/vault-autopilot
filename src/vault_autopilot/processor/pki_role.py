@@ -56,21 +56,15 @@ class PKIRoleApplyProcessor(
             await self.schedule(PKIRoleNode.from_payload(ev.resource))
 
         async def _on_issuer_processed(ev: event.IssuerApplySuccess) -> None:
+            issuer_node = IssuerFallbackNode.from_issuer_absolute_path(
+                ev.resource.absolute_path()
+            )
+
             async with self.dep_chain.lock() as mgr:
-                issuer_node = IssuerFallbackNode.from_issuer_absolute_path(
-                    ev.resource.absolute_path()
-                )
                 if not mgr.has_node(issuer_node):
                     _ = mgr.add_node(issuer_node)
 
-            await self.flush_pending_downstreams_for(
-                IssuerFallbackNode.from_issuer_absolute_path(
-                    ev.resource.absolute_path()
-                )
-            )
-
-        async def _on_postprocess_requested(_: event.ShutdownRequested) -> None:
-            await self.flush_any_pending_downstreams()
+            await self.flush_pending_downstreams_for(issuer_node)
 
         self.observer.register(
             (event.PKIRoleApplicationRequested,), _on_pki_role_apply_requested
@@ -83,7 +77,6 @@ class PKIRoleApplyProcessor(
             ),
             _on_issuer_processed,
         )
-        self.observer.register((event.ShutdownRequested,), _on_postprocess_requested)
 
     @override
     async def _flush(self, node: NodeType) -> None:
