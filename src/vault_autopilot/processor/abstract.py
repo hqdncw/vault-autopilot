@@ -100,6 +100,9 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
 
                 for upstream in upstream_fbs:
                     if not mgr.has_node(upstream):
+                        logger.debug(
+                            "[%s] add node %r", self.__class__.__name__, upstream
+                        )
                         mgr.add_node(upstream)
 
                     mgr.add_edge(upstream, node)

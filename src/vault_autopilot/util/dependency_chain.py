@@ -1,5 +1,4 @@
 import abc
-import logging
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import (
@@ -27,7 +26,6 @@ DependencyStatus = Literal[
 ]
 """Represents the status of a dependency in a dependency graph."""
 
-logger = logging.getLogger(__name__)
 default_obj = object()
 
 
@@ -118,7 +116,6 @@ class DependencyChain(Generic[T]):
     def add_node(self, node: T) -> int:
         node_hash = hash(node)
         self._graph.add_node(node_hash, payload=node)
-        logger.debug("added node %r", node)
         return node_hash
 
     def get_node_by_hash(self, value: int, default: P) -> T | P:
@@ -159,7 +156,6 @@ class DependencyChain(Generic[T]):
         """
         u_hash, v_hash = hash(u), hash(v)
         self._graph.add_edge(u_hash, v_hash)  # pyright: ignore[reportUnknownMemberType]
-        logger.debug("added edge (u: %r, v: %r)", u_hash, v_hash)
         return u_hash, v_hash
 
     def has_node(self, node: T) -> bool:
