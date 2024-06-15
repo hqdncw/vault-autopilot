@@ -68,7 +68,7 @@ class RecordRenderer(AbstractRenderer):
         return Group(
             *(
                 self._compose_record_content(record)
-                for record in self._records.values()
+                for record in reversed(self._records.values())
             ),
         )
 
@@ -210,37 +210,42 @@ async def async_apply(
                 "Updating {resource_kind} {absolute_path!r}... done",
                 RecordStyle.INFO,
             ),
+            "update_error": (
+                "Updating {resource_kind} {absolute_path!r}... done",
+                RecordStyle.CRITICAL,
+            ),
             "create_success": (
                 "Creating {resource_kind} {absolute_path!r}... done",
                 RecordStyle.INFO,
+            ),
+            "create_error": (
+                "Creating {resource_kind} {absolute_path!r}... FAILED",
+                RecordStyle.CRITICAL,
             ),
         }
 
         async def on_resource_update(
             ev: Union[event.ResourceApplicationRequested, event.ResourceApplySuccess],
         ) -> None:
-            if isinstance(ev, event.ResourceApplicationRequested):  # type: ignore[arg-type]
+            if isinstance(ev, event.ResourceApplicationRequested):
                 template = TEMPLATE_DICT["application_requested"]
-            elif isinstance(ev, event.ResourceApplicationInitiated):  # type: ignore[arg-type]
+            elif isinstance(ev, event.ResourceApplicationInitiated):
                 return
-            elif isinstance(ev, event.ResourceVerifySuccess):  # type: ignore[arg-type]
+            elif isinstance(ev, event.ResourceVerifySuccess):
                 if isinstance(ev, (event.IssuerVerifySuccess)):
                     template = TEMPLATE_DICT["verify_skipped"]
                 else:
                     template = TEMPLATE_DICT["verify_success"]
-            elif isinstance(ev, event.ResourceUpdateSuccess):  # type: ignore[arg-type]
-                template = TEMPLATE_DICT["update_success"]
-            elif isinstance(
-                ev,
-                Union[
-                    event.ResourceUpdateError,
-                    event.ResourceCreateError,
-                    event.ResourceVerifyError,
-                ],  # type: ignore[arg-type]
-            ):
+            elif isinstance(ev, event.ResourceVerifyError):
                 template = TEMPLATE_DICT["verify_error"]
-            elif isinstance(ev, event.ResourceCreateSuccess):  # type: ignore[arg-type]
+            elif isinstance(ev, event.ResourceUpdateSuccess):
+                template = TEMPLATE_DICT["update_success"]
+            elif isinstance(ev, event.ResourceUpdateError):
+                template = TEMPLATE_DICT["update_error"]
+            elif isinstance(ev, event.ResourceCreateSuccess):
                 template = TEMPLATE_DICT["create_success"]
+            elif isinstance(ev, event.ResourceCreateError):
+                template = TEMPLATE_DICT["create_error"]
             else:
                 raise RuntimeError("Unexpected event type: %r" % ev)
 
