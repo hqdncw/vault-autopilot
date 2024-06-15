@@ -1,6 +1,6 @@
 import pathlib
 from dataclasses import dataclass
-from typing import NotRequired, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from typing_extensions import override
 
@@ -83,12 +83,53 @@ class ManifestValidationError(ManifestError):
 
 @dataclass(slots=True)
 class SecretIntegrityError(ApplicationError):
-    pass
+    """Raised when a secret fails integrity check."""
+
+    class Context(TypedDict):
+        """
+        Attributes:
+            resource: The secret resource that failed the integrity check.
+        """
+
+        resource: VersionedSecretApplyDTO
+
+    ctx: Context
+
+    @override
+    def format_message(self) -> str:
+        return "Resource %r integrity check failed.\n\n%s" % (
+            str(self.ctx["resource"].absolute_path()),
+            self.message.format(ctx=self.ctx),
+        )
+
+
+@dataclass(slots=True)
+class SnapshotMismatchError(SecretIntegrityError):
+    """
+    Raised when the snapshot of a secret does not match the expected structure.
+
+    This error usually occurs when you modify some fields of the manifest object but
+    forget to bump the version field.
+    """
+
+    class Context(SecretIntegrityError.Context):
+        """
+        Attributes:
+            diff: A dictionary describing the structural differences between the
+                expected and actual secret structures.
+        """
+
+        diff: dict[str, Any]
+
+    ctx: Context
 
 
 @dataclass(slots=True)
 class SecretVersionMismatchError(SecretIntegrityError):
-    class Context(TypedDict):
-        resource: VersionedSecretApplyDTO
+    """
+    Raised when the version of a secret does not match the expected version.
 
-    ctx: Context
+    This error usually occurs when the secret version in the manifest does not match
+    the version of the secret stored in the system. This can happen if the secret
+    has been updated since the last time the manifest was applied.
+    """

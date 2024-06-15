@@ -1,8 +1,18 @@
+import json
 from abc import abstractmethod
-from typing import Generic, Literal, NotRequired, TypedDict, TypeVar
+from dataclasses import dataclass
+from typing import Any, Generic, Literal, NotRequired, TypedDict, TypeVar
 
+from deepdiff import DeepDiff
+
+from vault_autopilot._pkg.asyva import Client as AsyvaClient
 from vault_autopilot._pkg.asyva.exc import CASParameterMismatchError
-from vault_autopilot.exc import SecretVersionMismatchError
+from vault_autopilot._pkg.asyva.manager.kvv2 import ReadMetadataResult
+from vault_autopilot.exc import (
+    SecretIntegrityError,
+    SecretVersionMismatchError,
+    SnapshotMismatchError,
+)
 
 from ..dto.abstract import VersionedSecretApplyDTO
 
@@ -24,7 +34,34 @@ class ApplyResult(TypedDict):
     errors: NotRequired[tuple[Exception, ...]]
 
 
+@dataclass(slots=True)
 class VersionedSecretApplyMixin(Generic[T]):
+    client: AsyvaClient
+
+    SNAPSHOT_LABEL = "hqdncw.github.io/vault-autopilot/snapshot"
+
+    @abstractmethod
+    def builder(self, payload: dict[str, Any]) -> T: ...
+
+    async def diff(self, payload: T, kv_metadata: ReadMetadataResult) -> dict[str, Any]:
+        if not (
+            snapshot := (
+                (kv_metadata.data["custom_metadata"] or {}).get(self.SNAPSHOT_LABEL, "")
+            )
+        ):
+            raise SecretIntegrityError(
+                "Manifest object not found in secret metadata, secret integrity "
+                "compromised.",
+                ctx=SecretIntegrityError.Context(resource=payload),
+            )
+
+        return DeepDiff(
+            json.loads(snapshot) or {},
+            payload.__dict__,
+            ignore_order=True,
+            verbose_level=2,
+        )
+
     async def apply(self, payload: T) -> ApplyResult:
         """
         Updates, creates, or verifies a secret using the given payload and version.
@@ -46,20 +83,18 @@ class VersionedSecretApplyMixin(Generic[T]):
 
                 if required_cas == 0:
                     exc = SecretVersionMismatchError(
-                        "Resource %r version mismatch: Expected version: %d (to "
-                        "generate the secret data), got: %d. Please enter the correct "
-                        "version and try again."
-                        % (payload.absolute_path(), required_cas + 1, provided_version),
+                        "Version mismatch. Expected version: %d (to generate the "
+                        "secret data), got: %d. Please enter the correct version "
+                        "and try again." % (required_cas + 1, provided_version),
                         ctx,
                     )
                 else:
                     exc = SecretVersionMismatchError(
-                        "Resource %r version mismatch. Expected either version "
-                        "%d (to keep the secret data untouched) or version %d (to "
-                        "regenerate the secret data). Instead, version %r was provided."
-                        " Please enter the correct version and try again."
+                        "Version mismatch. Expected either version %d (to keep the "
+                        "secret data untouched) or version %d (to regenerate the "
+                        "secret data). Instead, version %r was provided. Please enter "
+                        "the correct correct version and try again."
                         % (
-                            payload.absolute_path(),
                             required_cas,
                             required_cas + 1,
                             provided_version,
@@ -68,6 +103,19 @@ class VersionedSecretApplyMixin(Generic[T]):
                     )
 
                 return ApplyResult(status="verify_error", errors=(exc,))
+
+            if diff := await self.diff(
+                payload,
+                await self.client.read_kv_metadata(
+                    mount_path=payload.spec["secrets_engine"],
+                    path=payload.spec["path"],
+                ),
+            ):
+                raise SnapshotMismatchError(
+                    "The secret data has been modified unexpectedly. Please review and "
+                    "update the secret accordingly.\n\n{ctx[diff]!r}",
+                    ctx=SnapshotMismatchError.Context(resource=payload, diff=diff),
+                )
 
             return ApplyResult(status="verify_success")
 

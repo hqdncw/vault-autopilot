@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from typing_extensions import override
 
@@ -8,7 +8,10 @@ from .. import dto, util
 from ..dispatcher import event
 from ..service import PasswordService
 from ..service.abstract import ApplyResult, ApplyResultStatus
-from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
+from .abstract import (
+    ChainBasedProcessor,
+    SecretsEngineFallbackNode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,19 +59,17 @@ NodeType = PasswordNode | PasswordPolicyFallbackNode | SecretsEngineFallbackNode
 
 
 @dataclass(slots=True)
-class PasswordApplyProcessor(
-    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
-):
+class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
     pwd_svc: PasswordService
 
     @override
     async def _build_fallback_upstream_nodes(
         self, node: NodeType
     ) -> Iterable[NodeType]:
-        assert isinstance(node, PasswordNode)
+        assert isinstance(node, PasswordNode), node
 
         return (
-            PasswordPolicyFallbackNode.from_path(node.payload.spec["path"]),
+            PasswordPolicyFallbackNode.from_path(node.payload.spec["policy_path"]),
             SecretsEngineFallbackNode.from_absolute_path(
                 node.payload.spec["secrets_engine"]
             ),
@@ -81,42 +82,55 @@ class PasswordApplyProcessor(
         ) -> None:
             await self.schedule(PasswordNode.from_payload(ev.resource))
 
-        async def _on_password_policy_processed(
-            ev: event.PasswordPolicyApplySuccess,
-        ) -> None:
-            policy_node = PasswordPolicyFallbackNode.from_path(
-                ev.resource.absolute_path()
-            )
-
-            async with self.dep_chain.lock() as mgr:
-                if not mgr.has_node(policy_node):
-                    _ = mgr.add_node(policy_node)
-
-            await self.flush_pending_downstreams_for(policy_node)
-
         self.observer.register(
             (event.PasswordApplicationRequested,),
             _on_password_apply_requested,
         )
-        self.observer.register(
-            (
-                event.PasswordPolicyCreateSuccess,
-                event.PasswordPolicyUpdateSuccess,
-                event.PasswordPolicyVerifySuccess,
-            ),
-            _on_password_policy_processed,
+
+        ChainBasedProcessor.initialize(self)
+
+    @property
+    def upstream_dependency_triggers(
+        self,
+    ) -> Sequence[
+        type[event.SecretsEngineApplySuccess | event.PasswordPolicyApplySuccess]
+    ]:
+        return (
+            event.SecretsEngineCreateSuccess,
+            event.SecretsEngineUpdateSuccess,
+            event.SecretsEngineVerifySuccess,
+            event.PasswordPolicyCreateSuccess,
+            event.PasswordPolicyUpdateSuccess,
+            event.PasswordPolicyVerifySuccess,
         )
 
     @override
-    async def _flush(self, node: NodeType) -> None:
-        assert isinstance(node, PasswordNode)
+    def upstream_node_builder(self, ev: event.EventType) -> NodeType:
+        if isinstance(ev, event.SecretsEngineApplySuccess):
+            return SecretsEngineFallbackNode.from_absolute_path(
+                ev.resource.spec["path"]
+            )
+        elif isinstance(ev, event.PasswordPolicyApplySuccess):
+            return PasswordPolicyFallbackNode.from_path(ev.resource.absolute_path())
 
-        await self.observer.trigger(event.PasswordApplicationRequested(node.payload))
+        raise RuntimeError("Unexpected upstream dependency %r", ev)
+
+    @override
+    def downstream_selector(self, node: NodeType) -> bool:
+        return isinstance(node, PasswordNode)
+
+    @override
+    async def _flush(self, node: NodeType) -> None:
+        assert isinstance(node, PasswordNode), node
+
+        await self.observer.trigger(event.PasswordApplicationInitiated(node.payload))
 
         try:
             result = await self.pwd_svc.apply(node.payload)
         except Exception as ex:
             result = ApplyResult(status="verify_error", errors=(ex,))
+
+        logger.debug("applying finished %r", node.payload.absolute_path())
 
         await self.observer.trigger(
             APPLY_STATUS_EVENT_MAP[result["status"]](node.payload)
@@ -124,7 +138,3 @@ class PasswordApplyProcessor(
 
         if errors := result.get("errors"):
             raise ExceptionGroup("Failed to apply password", errors)
-
-        logger.debug("applying finished %r", node.payload.absolute_path())
-
-        await self.observer.trigger(event.PasswordCreateSuccess(node.payload))

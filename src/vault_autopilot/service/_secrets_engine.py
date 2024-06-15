@@ -94,44 +94,42 @@ class SecretsEngineService:
         mount_configuration: ReadMountConfigurationResult,
         kv_configuration: ReadConfigurationResult | None = None,
     ) -> dict[str, Any]:
-        remote = dto.SecretsEngineApplyDTO.model_validate(
-            dict(
-                kind="SecretsEngine",
-                spec=dict(
-                    path=payload.spec["path"],
-                    engine={  # type: ignore[reportArgumentType]
-                        "type": payload.spec["engine"]["type"],
-                        **camelize(
-                            {
-                                **(
-                                    model_dump(
-                                        recursive_dict_filter(
-                                            mount_configuration.data,
-                                            payload.spec["engine"],
-                                        ),
-                                        include=ENABLE_FIELDS,
-                                    )
-                                    or {}
-                                ),
-                                **(
-                                    model_dump(
-                                        recursive_dict_filter(
-                                            kv_configuration.data,
-                                            payload.spec["engine"],
-                                        ),
-                                    )
-                                    if kv_configuration is not None
-                                    else {}
-                                ),
-                            }
-                        ),
-                    },
-                ),
-            )
+        snapshot = dto.SecretsEngineApplyDTO(
+            kind="SecretsEngine",
+            spec=dto.SecretsEngineApplyDTO.Spec(
+                path=payload.spec["path"],
+                engine={  # type: ignore[reportArgumentType]
+                    "type": payload.spec["engine"]["type"],
+                    **camelize(
+                        {
+                            **(
+                                model_dump(
+                                    recursive_dict_filter(
+                                        mount_configuration.data,
+                                        payload.spec["engine"],
+                                    ),
+                                    include=ENABLE_FIELDS,
+                                )
+                                or {}
+                            ),
+                            **(
+                                model_dump(
+                                    recursive_dict_filter(
+                                        kv_configuration.data,
+                                        payload.spec["engine"],
+                                    ),
+                                )
+                                if kv_configuration is not None
+                                else {}
+                            ),
+                        }
+                    ),
+                },
+            ),
         )
 
         if (config := payload.spec["engine"].get("config")) is not None:
-            remote.spec["engine"]["config"] = SecretsEngineConfig(
+            snapshot.spec["engine"]["config"] = SecretsEngineConfig(
                 **model_dump(
                     recursive_dict_filter(mount_configuration.data, config),
                     include=TUNE_FIELDS,
@@ -139,8 +137,8 @@ class SecretsEngineService:
             )
 
         return DeepDiff(
-            remote,
-            payload,
+            snapshot.__dict__,
+            payload.__dict__,
             ignore_order=True,
             verbose_level=2,
         )

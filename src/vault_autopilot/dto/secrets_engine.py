@@ -30,14 +30,15 @@ class PKIEngineOptions(AbstractEngineOptions):
     type: Literal["pki"]
 
 
-class SecretsEngineSpec(TypedDict):
-    path: str
-    engine: Annotated[PKIEngineOptions | KvV2EngineOptions, Field(discriminator="type")]
-
-
 class SecretsEngineApplyDTO(AbstractDTO):
+    class Spec(TypedDict):
+        path: str
+        engine: Annotated[
+            PKIEngineOptions | KvV2EngineOptions, Field(discriminator="type")
+        ]
+
     kind: Literal["SecretsEngine"] = "SecretsEngine"
-    spec: SecretsEngineSpec
+    spec: Spec
 
     def absolute_path(self) -> str:
         return self.spec["path"]

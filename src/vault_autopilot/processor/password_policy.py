@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class PasswordPolicyApplyProcessor(
-    AbstractProcessor[event.EventObserver[event.EventType]]
-):
+class PasswordPolicyApplyProcessor(AbstractProcessor[event.EventType]):
     pwd_policy_svc: PasswordPolicyService
 
     @override

@@ -2,18 +2,12 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
-from .. import dto, util
+from vault_autopilot.util.model import model_dump_json
+
+from .. import dto
 from .._pkg import asyva
-from ..dto.abstract import StringEncodingType
+from ..util.encoding import encode
 from . import abstract
-
-
-def encode(value: str, encoding: StringEncodingType) -> str:
-    match encoding:
-        case "base64":
-            return util.encoding.base64_encode(value)
-        case "utf8":
-            return value
 
 
 @dataclass(slots=True)
@@ -41,7 +35,16 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
         # may raise a CASParameterMismatchError
         _ = await self.client.update_or_create_secret(
             path=spec["path"],
-            data={spec["secret_key"]: encode(value=value, encoding=spec["encoding"])},
+            data={
+                spec["secret_key"]: encode(
+                    value=value.encode("utf-8"), encoding=spec["encoding"]
+                )
+            },
             cas=spec["version"] - 1,
             mount_path=spec["secrets_engine"],
+        )
+        _ = await self.client.update_or_create_metadata(
+            mount_path=spec["secrets_engine"],
+            path=spec["path"],
+            custom_metadata={self.SNAPSHOT_LABEL: model_dump_json(payload)},
         )

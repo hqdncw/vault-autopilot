@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Iterable
 
@@ -9,7 +10,10 @@ from ..dispatcher import event
 from ..service import IssuerService
 from ..service.abstract import ApplyResult, ApplyResultStatus
 from ..util.dependency_chain import AbstractNode, FallbackNode
-from .abstract import ChainBasedProcessor, SecretsEngineFallbackNode
+from .abstract import (
+    ChainBasedProcessor,
+    SecretsEngineFallbackNode,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,9 +77,7 @@ NodeType = IssuerNode | IssuerFallbackNode | SecretsEngineFallbackNode
 
 
 @dataclass(slots=True)
-class IssuerApplyProcessor(
-    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
-):
+class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
     iss_svc: IssuerService
 
     @override
@@ -100,51 +102,8 @@ class IssuerApplyProcessor(
         )
 
     @override
-    def initialize(self) -> None:
-        async def _on_issuer_apply_requested(
-            ev: event.IssuerApplicationRequested,
-        ) -> None:
-            await self.schedule(IssuerNode.from_payload(ev.resource))
-
-        async def _on_secrets_engine_apply_success(
-            ev: event.SecretsEngineApplySuccess,
-        ) -> None:
-            se_node, downstreams_to_flush = (
-                SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"]),
-                [],
-            )
-
-            async with self.dep_chain.lock() as mgr:
-                if not mgr.has_node(se_node):
-                    mgr.add_node(se_node)
-                    mgr.set_node_status(se_node, "satisfied")
-                    return
-
-                mgr.set_node_status(se_node, "satisfied")
-
-                for downstream in mgr.filter_downstreams(
-                    se_node, lambda node: isinstance(node, IssuerNode)
-                ):
-                    downstreams_to_flush.append(downstream)
-                    mgr.set_node_status(downstream, status="in_progress")
-
-            await self.flush_nodes(downstreams_to_flush)
-
-        self.observer.register(
-            (event.IssuerApplicationRequested,), _on_issuer_apply_requested
-        )
-        self.observer.register(
-            (
-                event.SecretsEngineCreateSuccess,
-                event.SecretsEngineUpdateSuccess,
-                event.SecretsEngineVerifySuccess,
-            ),
-            _on_secrets_engine_apply_success,
-        )
-
-    @override
     async def _flush(self, node: NodeType) -> None:
-        assert isinstance(node, IssuerNode)
+        assert isinstance(node, IssuerNode), node
 
         await self.observer.trigger(event.IssuerApplicationInitiated(node.payload))
 
@@ -161,3 +120,35 @@ class IssuerApplyProcessor(
             raise ExceptionGroup("Failed to apply issuer", errors)
 
         logger.debug("applying finished %r", node.payload.absolute_path())
+
+    @override
+    def initialize(self) -> None:
+        async def _on_issuer_apply_requested(
+            ev: event.IssuerApplicationRequested,
+        ) -> None:
+            await self.schedule(IssuerNode.from_payload(ev.resource))
+
+        self.observer.register(
+            (event.IssuerApplicationRequested,), _on_issuer_apply_requested
+        )
+
+        ChainBasedProcessor.initialize(self)
+
+    @property
+    def upstream_dependency_triggers(
+        self,
+    ) -> Sequence[type[event.SecretsEngineApplySuccess]]:
+        return (
+            event.SecretsEngineCreateSuccess,
+            event.SecretsEngineUpdateSuccess,
+            event.SecretsEngineVerifySuccess,
+        )
+
+    @override
+    def upstream_node_builder(self, ev: event.EventType) -> NodeType:
+        assert isinstance(ev, event.SecretsEngineApplySuccess), ev
+        return SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"])
+
+    @override
+    def downstream_selector(self, node: NodeType) -> bool:
+        return isinstance(node, IssuerNode)

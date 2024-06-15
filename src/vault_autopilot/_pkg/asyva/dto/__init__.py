@@ -8,7 +8,7 @@ from .issuer import (
     KeyUpdateDTO,
 )
 from .pki_role import PKIRoleCreateDTO
-from .secret import SecretCreateDTO, SecretGetVersionDTO
+from .secret import SecretCreateDTO, SecretGetDTO, SecretUpdateOrCreateMetadata
 from .secrets_engine import (
     SecretsEngineConfigureDTO,
     SecretsEngineEnableDTO,
@@ -25,7 +25,8 @@ __all__ = (
     "IssuerUpdateDTO",
     "KeyUpdateDTO",
     "SecretCreateDTO",
-    "SecretGetVersionDTO",
+    "SecretGetDTO",
+    "SecretUpdateOrCreateMetadata",
     "PKIRoleCreateDTO",
     "SecretsEngineEnableDTO",
     "SecretsEngineConfigureDTO",

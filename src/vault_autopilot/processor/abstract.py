@@ -1,16 +1,19 @@
-import abc
 import logging
+from abc import ABC, abstractmethod
 from asyncio import Semaphore, TaskGroup
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Generic, Iterable, TypeVar
 
 from ironfence import Mutex
-from typing_extensions import override
+from typing_extensions import TYPE_CHECKING, override
 
 from .._pkg import asyva
 from ..util.coro import create_task_limited
 from ..util.dependency_chain import DependencyChain, FallbackNode
+
+if TYPE_CHECKING:
+    from ..dispatcher import event
 
 T = TypeVar("T")
 P = TypeVar("P")
@@ -30,12 +33,12 @@ class SecretsEngineFallbackNode(FallbackNode):
 
 
 @dataclass(slots=True)
-class AbstractProcessor(abc.ABC, Generic[T]):
+class AbstractProcessor(ABC, Generic[T]):
     client: asyva.Client
-    observer: T
+    observer: "event.EventObserver[T]"
     sem: Semaphore
 
-    @abc.abstractmethod
+    @abstractmethod
     def initialize(self) -> None: ...
 
 
@@ -43,7 +46,7 @@ class AbstractProcessor(abc.ABC, Generic[T]):
 class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
     dep_chain: Mutex[DependencyChain[T]]
 
-    @abc.abstractmethod
+    @abstractmethod
     async def _build_fallback_upstream_nodes(self, node: T) -> Iterable[T]:
         """
         Build fallback upstream nodes for a given node.
@@ -72,8 +75,55 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
             An iterable of fallback upstream nodes. May be empty.
         """
 
-    @abc.abstractmethod
+    @abstractmethod
     async def _flush(self, node: T) -> None: ...
+
+    @property
+    @abstractmethod
+    def upstream_dependency_triggers(self) -> Sequence[type[P]]: ...
+
+    @abstractmethod
+    def upstream_node_builder(self, ev: P) -> T: ...
+
+    @abstractmethod
+    def downstream_selector(self, node: T) -> bool: ...
+
+    @override
+    def initialize(self) -> None:
+        async def _on_trigger(ev: P) -> None:
+            upstream, downstreams_to_flush = self.upstream_node_builder(ev), []
+
+            async with self.dep_chain.lock() as mgr:
+                if not mgr.has_node(upstream):
+                    mgr.add_node(upstream)
+                    mgr.set_node_status(upstream, "satisfied")
+                    return
+
+                mgr.set_node_status(upstream, "satisfied")
+
+                # print(upstream)
+                # print(list(mgr.filter_downstreams(upstream, lambda _: True)))
+                # tt = list(mgr.filter_downstreams(upstream, lambda _: True))[0]
+                # print(list(mgr.filter_upstreams(tt, lambda _: True)))
+                # for n in list(mgr.filter_upstreams(tt, lambda _: True)):
+                #     print(mgr.get_node_status(n))
+                # print(mgr.are_upstreams_satisfied(tt))
+
+                for downstream in (
+                    n
+                    for n in mgr.filter_downstreams(upstream, self.downstream_selector)
+                    if mgr.are_upstreams_satisfied(n)
+                    and mgr.get_node_status(n) == "pending"
+                ):
+                    downstreams_to_flush.append(downstream)
+                    mgr.set_node_status(downstream, status="in_progress")
+
+            await self.flush_nodes(downstreams_to_flush)
+
+        self.observer.register(
+            self.upstream_dependency_triggers,
+            _on_trigger,
+        )
 
     async def schedule(self, node: T) -> None:
         """
@@ -100,6 +150,9 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
 
                 for upstream in upstream_fbs:
                     if not mgr.has_node(upstream):
+                        logger.debug(
+                            "[%s] add node %r", self.__class__.__name__, upstream
+                        )
                         mgr.add_node(upstream)
 
                     mgr.add_edge(upstream, node)

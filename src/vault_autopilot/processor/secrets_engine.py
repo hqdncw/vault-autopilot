@@ -12,9 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class SecretsEngineApplyProcessor(
-    AbstractProcessor[event.EventObserver[event.EventType]]
-):
+class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
     secrets_engine_svc: SecretsEngineService
 
     @override
@@ -32,7 +30,7 @@ class SecretsEngineApplyProcessor(
     async def _apply(self, payload: dto.SecretsEngineApplyDTO) -> None:
         await self.observer.trigger(event.SecretsEngineApplicationInitiated(payload))
 
-        ev: event.ResourceApplySuccess | event.ResourceApplyError
+        ev: event.SecretsEngineApplySuccess | event.SecretsEngineApplyError
 
         try:
             result = await self.secrets_engine_svc.apply(payload)

@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Sequence
 
 from typing_extensions import override
 
@@ -32,7 +33,7 @@ NodeType = PKIRoleNode | IssuerFallbackNode
 
 @dataclass(slots=True)
 class PKIRoleApplyProcessor(
-    ChainBasedProcessor[NodeType, event.EventObserver[event.EventType]]
+    ChainBasedProcessor[NodeType, event.EventType],
 ):
     pki_role_svc: PKIRoleService
 
@@ -40,7 +41,7 @@ class PKIRoleApplyProcessor(
     async def _build_fallback_upstream_nodes(
         self, node: NodeType
     ) -> Iterable[NodeType]:
-        assert isinstance(node, PKIRoleNode)
+        assert isinstance(node, PKIRoleNode), node
 
         return (
             IssuerFallbackNode.from_issuer_absolute_path(
@@ -55,32 +56,34 @@ class PKIRoleApplyProcessor(
         ) -> None:
             await self.schedule(PKIRoleNode.from_payload(ev.resource))
 
-        async def _on_issuer_processed(ev: event.IssuerApplySuccess) -> None:
-            issuer_node = IssuerFallbackNode.from_issuer_absolute_path(
-                ev.resource.absolute_path()
-            )
-
-            async with self.dep_chain.lock() as mgr:
-                if not mgr.has_node(issuer_node):
-                    _ = mgr.add_node(issuer_node)
-
-            await self.flush_pending_downstreams_for(issuer_node)
-
         self.observer.register(
             (event.PKIRoleApplicationRequested,), _on_pki_role_apply_requested
         )
-        self.observer.register(
-            (
-                event.IssuerVerifySuccess,
-                event.IssuerUpdateSuccess,
-                event.IssuerCreateSuccess,
-            ),
-            _on_issuer_processed,
+
+        ChainBasedProcessor.initialize(self)
+
+    @property
+    def upstream_dependency_triggers(
+        self,
+    ) -> Sequence[type[event.IssuerApplySuccess]]:
+        return (
+            event.IssuerVerifySuccess,
+            event.IssuerUpdateSuccess,
+            event.IssuerCreateSuccess,
         )
 
     @override
+    def upstream_node_builder(self, ev: event.EventType) -> NodeType:
+        assert isinstance(ev, event.IssuerApplySuccess), ev
+        return IssuerFallbackNode.from_issuer_absolute_path(ev.resource.absolute_path())
+
+    @override
+    def downstream_selector(self, node: NodeType) -> bool:
+        return isinstance(node, PKIRoleNode)
+
+    @override
     async def _flush(self, node: NodeType) -> None:
-        assert isinstance(node, PKIRoleNode)
+        assert isinstance(node, PKIRoleNode), node
 
         await self.observer.trigger(event.PKIRoleApplicationInitiated(node.payload))
 

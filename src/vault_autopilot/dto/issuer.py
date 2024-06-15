@@ -20,17 +20,16 @@ class Chaining(TypedDict):
     use_pss: NotRequired[bool]
 
 
-class IssuerSpec(TypedDict):
-    name: str
-    secrets_engine: str
-    certificate: Certificate
-    chaining: NotRequired[Chaining]
-    # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
-
-
 class IssuerApplyDTO(AbstractDTO):
+    class Spec(TypedDict):
+        name: str
+        secrets_engine: str
+        certificate: Certificate
+        chaining: NotRequired[Chaining]
+        # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
+
     kind: Literal["Issuer"] = "Issuer"
-    spec: IssuerSpec
+    spec: Spec
 
     def absolute_path(self) -> str:
         return "/".join((self.spec["secrets_engine"], self.spec["name"]))

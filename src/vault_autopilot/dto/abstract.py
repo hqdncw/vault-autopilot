@@ -1,12 +1,12 @@
 from abc import abstractmethod
-from typing import Annotated, Literal
+from typing import Annotated
 
 import annotated_types
 import pydantic.alias_generators
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict
 
-StringEncodingType = Literal["base64", "utf8"]
+from vault_autopilot.util.encoding import Encoding
 
 
 class AbstractDTO(BaseModel):
@@ -20,7 +20,9 @@ class AbstractDTO(BaseModel):
 
 class SecretApplyDTO(AbstractDTO):
     class Spec(TypedDict):
-        encoding: Annotated[StringEncodingType, pydantic.Field(default="utf8")]
+        secrets_engine: str
+        path: str
+        encoding: Annotated[Encoding, pydantic.Field(default="utf8")]
 
     spec: Spec
 

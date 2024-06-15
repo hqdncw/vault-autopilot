@@ -243,6 +243,46 @@ class SecretsEngineVerifySuccess:
 
 
 @dataclass(slots=True)
+class SSHKeyApplicationRequested:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyApplicationInitiated:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyCreateError:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyUpdateError:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyVerifyError:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyCreateSuccess:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyUpdateSuccess:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
+class SSHKeyVerifySuccess:
+    resource: dto.SSHKeyApplyDTO
+
+
+@dataclass(slots=True)
 class ShutdownRequested:
     """
     Once all manifests have been applied, the dispatcher triggers this event to allow
@@ -256,6 +296,7 @@ ResourceApplicationRequested = (
     | PasswordPolicyApplicationRequested
     | PKIRoleApplicationRequested
     | SecretsEngineApplicationRequested
+    | SSHKeyApplicationRequested
 )
 ResourceApplicationInitiated = (
     PasswordApplicationInitiated
@@ -263,6 +304,7 @@ ResourceApplicationInitiated = (
     | PasswordPolicyApplicationInitiated
     | PKIRoleApplicationInitiated
     | SecretsEngineApplicationInitiated
+    | SSHKeyApplicationInitiated
 )
 ResourceCreateError = (
     PasswordCreateError
@@ -270,6 +312,7 @@ ResourceCreateError = (
     | PKIRoleCreateError
     | PasswordPolicyCreateError
     | SecretsEngineCreateError
+    | SSHKeyCreateError
 )
 ResourceUpdateError = (
     PasswordUpdateError
@@ -277,6 +320,7 @@ ResourceUpdateError = (
     | PKIRoleUpdateError
     | PasswordPolicyUpdateError
     | SecretsEngineUpdateError
+    | SSHKeyUpdateError
 )
 ResourceCreateSuccess = (
     PasswordCreateSuccess
@@ -284,6 +328,7 @@ ResourceCreateSuccess = (
     | PasswordPolicyCreateSuccess
     | PKIRoleCreateSuccess
     | SecretsEngineCreateSuccess
+    | SSHKeyCreateSuccess
 )
 ResourceUpdateSuccess = (
     PasswordUpdateSuccess
@@ -291,6 +336,7 @@ ResourceUpdateSuccess = (
     | PasswordPolicyUpdateSuccess
     | PKIRoleUpdateSuccess
     | SecretsEngineUpdateSuccess
+    | SSHKeyUpdateSuccess
 )
 ResourceVerifySuccess = (
     PasswordVerifySuccess
@@ -298,6 +344,7 @@ ResourceVerifySuccess = (
     | PasswordPolicyVerifySuccess
     | PKIRoleVerifySuccess
     | SecretsEngineVerifySuccess
+    | SSHKeyVerifySuccess
 )
 ResourceVerifyError = (
     PasswordVerifyError
@@ -305,6 +352,7 @@ ResourceVerifyError = (
     | PasswordPolicyVerifyError
     | PKIRoleVerifyError
     | SecretsEngineVerifyError
+    | SSHKeyVerifyError
 )
 
 IssuerApplySuccess = IssuerCreateSuccess | IssuerUpdateSuccess | IssuerVerifySuccess
@@ -320,6 +368,7 @@ PKIRoleApplySuccess = PKIRoleCreateSuccess | PKIRoleUpdateSuccess | PKIRoleVerif
 SecretsEngineApplySuccess = (
     SecretsEngineCreateSuccess | SecretsEngineUpdateSuccess | SecretsEngineVerifySuccess
 )
+SSHKeyApplySuccess = SSHKeyCreateSuccess | SSHKeyUpdateSuccess | SSHKeyVerifySuccess
 
 ResourceApplySuccess = (
     PasswordApplySuccess
@@ -327,6 +376,7 @@ ResourceApplySuccess = (
     | PasswordPolicyApplySuccess
     | PKIRoleApplySuccess
     | SecretsEngineApplySuccess
+    | SSHKeyApplySuccess
 )
 
 IssuerApplyError = IssuerCreateError | IssuerUpdateError | IssuerVerifyError
@@ -338,6 +388,7 @@ PKIRoleApplyError = PKIRoleCreateError | PKIRoleUpdateError | PKIRoleVerifyError
 SecretsEngineApplyError = (
     SecretsEngineCreateError | SecretsEngineUpdateError | SecretsEngineVerifyError
 )
+SSHKeyApplyError = SSHKeyCreateError | SSHKeyUpdateError | SSHKeyVerifyError
 
 ResourceApplyError = (
     PasswordApplyError
@@ -345,8 +396,8 @@ ResourceApplyError = (
     | PasswordPolicyApplyError
     | PKIRoleApplyError
     | SecretsEngineApplyError
+    | SSHKeyApplyError
 )
-
 
 EventType = (
     PasswordApplicationRequested
@@ -390,5 +441,13 @@ EventType = (
     | SecretsEngineCreateSuccess
     | SecretsEngineUpdateSuccess
     | SecretsEngineVerifySuccess
+    | SSHKeyApplicationRequested
+    | SSHKeyApplicationInitiated
+    | SSHKeyCreateError
+    | SSHKeyUpdateError
+    | SSHKeyVerifyError
+    | SSHKeyCreateSuccess
+    | SSHKeyUpdateSuccess
+    | SSHKeyVerifySuccess
     | ShutdownRequested
 )
