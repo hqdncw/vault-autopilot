@@ -40,9 +40,6 @@ class VersionedSecretApplyMixin(Generic[T]):
 
     SNAPSHOT_LABEL = "hqdncw.github.io/vault-autopilot/snapshot"
 
-    @abstractmethod
-    def builder(self, payload: dict[str, Any]) -> T: ...
-
     async def diff(self, payload: T, kv_metadata: ReadMetadataResult) -> dict[str, Any]:
         if not (
             snapshot := (
