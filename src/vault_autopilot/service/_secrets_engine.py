@@ -94,7 +94,7 @@ class SecretsEngineService:
         mount_configuration: ReadMountConfigurationResult,
         kv_configuration: ReadConfigurationResult | None = None,
     ) -> dict[str, Any]:
-        remote = dto.SecretsEngineApplyDTO(
+        snapshot = dto.SecretsEngineApplyDTO(
             kind="SecretsEngine",
             spec=dto.SecretsEngineApplyDTO.Spec(
                 path=payload.spec["path"],
@@ -129,7 +129,7 @@ class SecretsEngineService:
         )
 
         if (config := payload.spec["engine"].get("config")) is not None:
-            remote.spec["engine"]["config"] = SecretsEngineConfig(
+            snapshot.spec["engine"]["config"] = SecretsEngineConfig(
                 **model_dump(
                     recursive_dict_filter(mount_configuration.data, config),
                     include=TUNE_FIELDS,
@@ -137,7 +137,7 @@ class SecretsEngineService:
             )
 
         return DeepDiff(
-            remote.__dict__,
+            snapshot.__dict__,
             payload.__dict__,
             ignore_order=True,
             verbose_level=2,

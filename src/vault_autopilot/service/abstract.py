@@ -45,7 +45,7 @@ class VersionedSecretApplyMixin(Generic[T]):
 
     async def diff(self, payload: T, kv_metadata: ReadMetadataResult) -> dict[str, Any]:
         if not (
-            manifest_object := (
+            snapshot := (
                 (kv_metadata.data["custom_metadata"] or {}).get(self.SNAPSHOT_LABEL, "")
             )
         ):
@@ -56,7 +56,7 @@ class VersionedSecretApplyMixin(Generic[T]):
             )
 
         return DeepDiff(
-            json.loads(manifest_object) or {},
+            json.loads(snapshot) or {},
             payload.__dict__,
             ignore_order=True,
             verbose_level=2,
