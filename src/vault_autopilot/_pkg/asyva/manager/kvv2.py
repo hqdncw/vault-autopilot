@@ -1,8 +1,10 @@
 import logging
 from http import HTTPStatus
-from typing import Any, cast
+from typing import Any
 
 from typing_extensions import TypedDict
+
+from vault_autopilot.util.model import model_dump
 
 from .. import constants, dto
 from ..exc import (
@@ -31,6 +33,23 @@ class ReadConfigurationResult(AbstractResult):
         cas_required: bool
         delete_version_after: str
         max_versions: int
+
+    data: Data
+
+
+class ReadMetadataResult(AbstractResult):
+    class VersionInfo(TypedDict):
+        created_time: str
+        deletion_time: str
+        destroyed: bool
+
+    class Data(ReadConfigurationResult.Data):
+        created_time: str
+        current_version: int
+        oldest_version: int
+        updated_time: str
+        custom_metadata: dict[str, str] | None
+        versions: dict[str, "ReadMetadataResult.VersionInfo"]
 
     data: Data
 
@@ -73,11 +92,11 @@ class KVV2Manager(BaseManager):
                 try:
                     ctx.update(
                         {
-                            "required_cas": await self.get_version(
-                                dto.SecretGetVersionDTO(
-                                    mount_path=mount_path, path=path
+                            "required_cas": (
+                                await self.read_metadata(
+                                    dto.SecretGetDTO(mount_path=mount_path, path=path)
                                 )
-                            )
+                            ).data["current_version"]
                         }
                     )
                 except InvalidPathError:
@@ -96,18 +115,32 @@ class KVV2Manager(BaseManager):
 
         raise await VaultAPIError.from_response("Failed to create/update secret", resp)
 
-    async def get_version(self, payload: dto.SecretGetVersionDTO) -> int:
+    async def update_or_create_metadata(
+        self, payload: dto.SecretUpdateOrCreateMetadata
+    ) -> None:
+        async with self.new_session() as sess:
+            resp = await sess.post(
+                "/v1/%s/metadata/%s" % (payload["mount_path"], payload["path"]),
+                json=model_dump(payload, exclude=("mount_path", "path")),
+            )
+
+        if resp.status == HTTPStatus.NO_CONTENT:
+            return
+
+        raise await VaultAPIError.from_response(
+            "Failed to update/create secret metadata", resp
+        )
+
+    async def read_metadata(self, payload: dto.SecretGetDTO) -> ReadMetadataResult:
         async with self.new_session() as sess:
             resp = await sess.get(
                 "/v1/%s/metadata/%s" % (payload["mount_path"], payload["path"])
             )
 
         if resp.status == HTTPStatus.OK:
-            return cast(int, (await resp.json())["data"]["current_version"])
+            return ReadMetadataResult.from_response(await resp.json() or {})
 
-        raise await VaultAPIError.from_response(
-            "Failed to retrieve secret current version", resp
-        )
+        raise await VaultAPIError.from_response("Failed to read secret metadata", resp)
 
     async def configure_secret_engine(
         self, payload: dto.SecretsEngineConfigureDTO

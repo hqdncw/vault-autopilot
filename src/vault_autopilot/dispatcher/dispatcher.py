@@ -36,7 +36,7 @@ class Dispatcher(Generic[T, P]):
 
     queue: asyncio.Queue[T | None]
     client: InitVar[asyva.client.Client]
-    processing_registry: InitVar[dict[str, AbstractProcessor[event.EventObserver[P]]]]
+    processing_registry: InitVar[dict[str, AbstractProcessor[P]]]
     observer: event.EventObserver[P]
     event_builder: Callable[[T | None], P]
     max_dispatch: InitVar[MaxDispatchType] = 0
@@ -47,7 +47,7 @@ class Dispatcher(Generic[T, P]):
     def __post_init__(
         self,
         client: asyva.Client,
-        processing_registry: dict[str, AbstractProcessor[event.EventObserver[P]]],
+        processing_registry: dict[str, AbstractProcessor[P]],
         max_dispatch: MaxDispatchType,
     ) -> None:
         self._sem = (

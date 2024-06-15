@@ -6,15 +6,14 @@ from .._pkg.asyva.dto import pki_role
 from .abstract import AbstractDTO
 
 
-class PKIRoleSpec(TypedDict):
-    name: str
-    secrets_engine: str
-    role: pki_role.PKIRoleFields
-
-
 class PKIRoleApplyDTO(AbstractDTO):
+    class Spec(TypedDict):
+        name: str
+        secrets_engine: str
+        role: pki_role.PKIRoleFields
+
     kind: Literal["PKIRole"] = "PKIRole"
-    spec: PKIRoleSpec
+    spec: Spec
 
     def absolute_path(self) -> str:
         return "/".join((self.spec["secrets_engine"], self.spec["name"]))

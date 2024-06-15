@@ -10,6 +10,15 @@ class SecretCreateDTO(TypedDict):
     mount_path: str
 
 
-class SecretGetVersionDTO(TypedDict):
+class SecretGetDTO(TypedDict):
     mount_path: str
     path: str
+
+
+class SecretUpdateOrCreateMetadata(TypedDict):
+    mount_path: str
+    path: str
+    max_versions: NotRequired[int]
+    cas_required: NotRequired[bool]
+    delete_version_after: NotRequired[str]
+    custom_metadata: NotRequired[dict[str, str]]

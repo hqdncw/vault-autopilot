@@ -18,6 +18,7 @@ from vault_autopilot.processor.password import PasswordApplyProcessor
 from vault_autopilot.processor.password_policy import PasswordPolicyApplyProcessor
 from vault_autopilot.processor.pki_role import PKIRoleApplyProcessor
 from vault_autopilot.processor.secrets_engine import SecretsEngineApplyProcessor
+from vault_autopilot.processor.ssh_key import SSHKeyApplyProcessor
 from vault_autopilot.util.dependency_chain import DependencyChain
 
 from ... import _conf, exc
@@ -29,6 +30,7 @@ from ...service import (
     PasswordService,
     PKIRoleService,
     SecretsEngineService,
+    SSHKeyService,
 )
 from ...util.coro import BoundlessSemaphore
 from ..exc import CLIError
@@ -83,7 +85,7 @@ class ManifestObject(AbstractManifestObject):
         | dto.PasswordApplyDTO
         | dto.SecretsEngineApplyDTO
         | dto.PasswordPolicyApplyDTO
-        | dto.SecretsEngineApplyDTO
+        | dto.SSHKeyApplyDTO
     ) = Field(discriminator="kind")
 
 
@@ -147,6 +149,9 @@ async def async_apply(
                 case "SecretsEngine":
                     assert isinstance(root, dto.SecretsEngineApplyDTO)
                     return event.SecretsEngineApplicationRequested(root)
+                case "SSHKey":
+                    assert isinstance(root, dto.SSHKeyApplyDTO)
+                    return event.SSHKeyApplicationRequested(root)
 
                 case _:
                     raise TypeError("Unexpected payload type: %r" % payload)
@@ -183,6 +188,11 @@ async def async_apply(
                 ),
                 "SecretsEngine": SecretsEngineApplyProcessor(
                     secrets_engine_svc=SecretsEngineService(client), **proc_kwargs()
+                ),
+                "SSHKey": SSHKeyApplyProcessor(
+                    ssh_key_svc=SSHKeyService(client),
+                    dep_chain=Mutex(DependencyChain()),
+                    **proc_kwargs(),
                 ),
             },
             queue=queue,
@@ -301,6 +311,14 @@ async def async_apply(
                 event.SecretsEngineCreateSuccess,
                 event.SecretsEngineUpdateSuccess,
                 event.SecretsEngineVerifySuccess,
+                event.SSHKeyApplicationRequested,
+                event.SSHKeyApplicationInitiated,
+                event.SSHKeyCreateError,
+                event.SSHKeyUpdateError,
+                event.SSHKeyVerifyError,
+                event.SSHKeyCreateSuccess,
+                event.SSHKeyUpdateSuccess,
+                event.SSHKeyVerifySuccess,
             ),
             callback=on_resource_update,
         )
@@ -371,7 +389,7 @@ async def async_apply(
                 #  manifest file where the policy path was defined.
                 asyva.exc.PasswordPolicyNotFoundError,
                 asyva.exc.SecretsEnginePathInUseError,
-                exc.SecretVersionMismatchError,
+                exc.SecretIntegrityError,
             ),
         ):
             # TODO: print the contents of a YAML file, highlighting any invalid

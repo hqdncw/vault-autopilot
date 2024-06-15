@@ -282,3 +282,17 @@ class Client:
         self, **payload: Unpack[dto.SecretsEngineGetDTO]
     ) -> kvv2.ReadConfigurationResult | None:
         return await self._kvv2_mgr.read_configuration(payload)
+
+    @exception_handler
+    @login_required
+    async def read_kv_metadata(
+        self, **payload: Unpack[dto.SecretGetDTO]
+    ) -> kvv2.ReadMetadataResult:
+        return await self._kvv2_mgr.read_metadata(payload)
+
+    @exception_handler
+    @login_required
+    async def update_or_create_metadata(
+        self, **payload: Unpack[dto.SecretUpdateOrCreateMetadata]
+    ) -> None:
+        return await self._kvv2_mgr.update_or_create_metadata(payload)
