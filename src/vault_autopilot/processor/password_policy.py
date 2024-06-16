@@ -35,13 +35,27 @@ class PasswordPolicyApplyProcessor(AbstractProcessor[event.EventType]):
     async def _apply(self, payload: dto.PasswordPolicyApplyDTO) -> None:
         await self.observer.trigger(event.PasswordPolicyApplicationInitiated(payload))
 
-        # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
         try:
-            await self.pwd_policy_svc.update_or_create(payload)
+            result = await self.pwd_policy_svc.apply(payload)
         except Exception:
-            await self.observer.trigger(event.PasswordPolicyCreateError(payload))
+            ev = event.PasswordPolicyCreateError(payload)
             raise
-
-        logger.debug("applying finished %r", payload.absolute_path())
-
-        await self.observer.trigger(event.PasswordPolicyCreateSuccess(payload))
+        else:
+            match result.get("status"):
+                case "verify_success":
+                    ev = event.PasswordPolicyVerifySuccess(payload)
+                case "verify_error":
+                    ev = event.PasswordPolicyVerifyError(payload)
+                case "update_success":
+                    ev = event.PasswordPolicyUpdateSuccess(payload)
+                case "update_error":
+                    ev = event.PasswordPolicyUpdateError(payload)
+                case "create_success":
+                    ev = event.PasswordPolicyCreateSuccess(payload)
+                case "create_error":
+                    ev = event.PasswordPolicyCreateError(payload)
+                case _ as status:
+                    raise NotImplementedError(status)
+        finally:
+            logger.debug("applying finished %r", payload.absolute_path())
+            await self.observer.trigger(ev)

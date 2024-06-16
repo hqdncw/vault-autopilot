@@ -14,11 +14,10 @@ import aiohttp
 import jinja2
 from typing_extensions import Unpack
 
-from vault_autopilot._pkg.asyva.manager import password_policy, system_backend
-
 from . import authenticator, composer, dto
 from .dto.password_policy import PasswordPolicy
-from .manager import kvv2, pki
+from .manager import kvv2, password_policy, pki, system_backend
+from .util.hcl import deseralize_password_policy
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -172,7 +171,7 @@ class Client:
                 policy in HCL format or an instance of :class:`asyva.PasswordPolicy`.
 
         References:
-            https://developer.hashicorp.com/vault/api-docs/system/policies-password#create-update-password-policy
+            <https://developer.hashicorp.com/vault/api-docs/system/policies-password#create-update-password-policy>
         """
         await self._pwd_policy_mgr.update_or_create(
             path=path,
@@ -181,6 +180,29 @@ class Client:
                 if isinstance(policy, dict)
                 else policy
             ),
+        )
+
+    @exception_handler
+    @login_required
+    async def read_password_policy(self, path: str) -> PasswordPolicy | None:
+        """
+        Reads an existing password policy.
+
+        Args:
+            path: Path to the password policy.
+
+        Returns:
+            The password policy in HCL format as a string.
+
+        References:
+            <https://developer.hashicorp.com/vault/api-docs/system/policies-password#read-password-policy>
+        """
+        result = await self._pwd_policy_mgr.read(path)
+
+        return (
+            deseralize_password_policy(result.data["policy"])
+            if result is not None
+            else None
         )
 
     @exception_handler
