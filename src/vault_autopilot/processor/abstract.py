@@ -101,14 +101,6 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
 
                 mgr.set_node_status(upstream, "satisfied")
 
-                # print(upstream)
-                # print(list(mgr.filter_downstreams(upstream, lambda _: True)))
-                # tt = list(mgr.filter_downstreams(upstream, lambda _: True))[0]
-                # print(list(mgr.filter_upstreams(tt, lambda _: True)))
-                # for n in list(mgr.filter_upstreams(tt, lambda _: True)):
-                #     print(mgr.get_node_status(n))
-                # print(mgr.are_upstreams_satisfied(tt))
-
                 for downstream in (
                     n
                     for n in mgr.filter_downstreams(upstream, self.downstream_selector)

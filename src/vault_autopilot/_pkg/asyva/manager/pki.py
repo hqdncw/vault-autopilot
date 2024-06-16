@@ -253,9 +253,6 @@ class PKIManager(BaseManager):
                 data=model_dump_json(payload, exclude={"mount_path", "name"}),
             )
 
-        print(resp.status)
-        print(payload)
-
         if resp.status == HTTPStatus.OK:
             return
 
@@ -290,8 +287,6 @@ class PKIManager(BaseManager):
             resp = await sess.get(
                 "/v1/%s/roles/%s" % (payload["mount_path"], payload["name"]),
             )
-
-        print(resp.status)
 
         if resp.status == HTTPStatus.OK:
             return RoleReadResult.from_response(await resp.json() or {})
