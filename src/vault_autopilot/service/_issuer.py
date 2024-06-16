@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from .. import dto
 from .._pkg import asyva
-from .._pkg.asyva.manager.pki import GetResult
+from .._pkg.asyva.manager.pki import IssuerReadResult
 from ..util.model import model_dump
 from . import abstract
 
@@ -85,8 +85,8 @@ class IssuerService:
 
         logger.debug("created issuer at path: %r", payload.absolute_path())
 
-    async def get(self, payload: dto.IssuerGetDTO) -> GetResult | None:
-        return await self.client.get_issuer(**payload)
+    async def get(self, payload: dto.IssuerGetDTO) -> IssuerReadResult | None:
+        return await self.client.read_issuer(**payload)
 
     async def apply(self, payload: dto.IssuerApplyDTO) -> abstract.ApplyResult:
         try:

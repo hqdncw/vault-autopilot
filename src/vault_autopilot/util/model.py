@@ -123,3 +123,24 @@ class ModelDumpKwargs(AbstractDumpKwargs):
 
 def model_dump(obj: Any, **kwargs: Unpack[ModelDumpKwargs]) -> dict[Any, Any]:
     return pydantic.RootModel(obj).model_dump(**kwargs)
+
+
+def recursive_dict_filter(dict1: Any, dict2: Any) -> dict[Any, Any]:
+    """
+    Example::
+
+        dict1 = {'a': 1, 'b': 2, 'c': {'d': 3, 'e': 4}, 'f': 5}
+        dict2 = {'a': 1, 'c': {'d': 3}}
+
+        result = recursive_dict_filter(dict1, dict2)
+
+        print(result)  # Output: {'a': 1, 'c': {'d': 3}}
+    """
+    result = {}
+    for k, v in dict1.items():
+        if k in dict2:
+            if isinstance(v, dict):
+                result[k] = recursive_dict_filter(v, dict2.get(k, {}))
+            else:
+                result[k] = v
+    return result

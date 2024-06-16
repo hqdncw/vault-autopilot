@@ -10,7 +10,7 @@ class SecretCreateDTO(TypedDict):
     mount_path: str
 
 
-class SecretGetDTO(TypedDict):
+class SecretReadDTO(TypedDict):
     mount_path: str
     path: str
 

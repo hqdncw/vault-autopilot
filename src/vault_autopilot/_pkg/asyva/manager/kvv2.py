@@ -2,7 +2,7 @@ import logging
 from http import HTTPStatus
 from typing import Any
 
-from typing_extensions import TypedDict
+from typing_extensions import TypedDict, Unpack
 
 from vault_autopilot.util.model import model_dump
 
@@ -56,7 +56,7 @@ class ReadMetadataResult(AbstractResult):
 
 class KVV2Manager(BaseManager):
     async def update_or_create(
-        self, payload: dto.SecretCreateDTO
+        self, **payload: Unpack[dto.SecretCreateDTO]
     ) -> UpdateOrCreateResult:
         """
         References:
@@ -94,7 +94,7 @@ class KVV2Manager(BaseManager):
                         {
                             "required_cas": (
                                 await self.read_metadata(
-                                    dto.SecretGetDTO(mount_path=mount_path, path=path)
+                                    mount_path=mount_path, path=path
                                 )
                             ).data["current_version"]
                         }
@@ -116,7 +116,7 @@ class KVV2Manager(BaseManager):
         raise await VaultAPIError.from_response("Failed to create/update secret", resp)
 
     async def update_or_create_metadata(
-        self, payload: dto.SecretUpdateOrCreateMetadata
+        self, **payload: Unpack[dto.SecretUpdateOrCreateMetadata]
     ) -> None:
         async with self.new_session() as sess:
             resp = await sess.post(
@@ -131,7 +131,9 @@ class KVV2Manager(BaseManager):
             "Failed to update/create secret metadata", resp
         )
 
-    async def read_metadata(self, payload: dto.SecretGetDTO) -> ReadMetadataResult:
+    async def read_metadata(
+        self, **payload: Unpack[dto.SecretReadDTO]
+    ) -> ReadMetadataResult:
         async with self.new_session() as sess:
             resp = await sess.get(
                 "/v1/%s/metadata/%s" % (payload["mount_path"], payload["path"])
@@ -143,7 +145,7 @@ class KVV2Manager(BaseManager):
         raise await VaultAPIError.from_response("Failed to read secret metadata", resp)
 
     async def configure_secret_engine(
-        self, payload: dto.SecretsEngineConfigureDTO
+        self, **payload: Unpack[dto.SecretsEngineConfigureDTO]
     ) -> None:
         """
         References:
@@ -162,7 +164,7 @@ class KVV2Manager(BaseManager):
         )
 
     async def read_configuration(
-        self, payload: dto.SecretsEngineGetDTO
+        self, **payload: Unpack[dto.SecretsEngineReadDTO]
     ) -> ReadConfigurationResult:
         """
         References:

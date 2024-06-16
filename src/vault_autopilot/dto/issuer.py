@@ -39,5 +39,4 @@ class IssuerApplyDTO(AbstractDTO):
         return self.spec["chaining"]["upstream_issuer_ref"]
 
 
-class IssuerGetDTO(issuer.IssuerGetDTO):
-    pass
+class IssuerGetDTO(issuer.IssuerReadDTO): ...

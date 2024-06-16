@@ -3,6 +3,8 @@ from dataclasses import dataclass
 
 from typing_extensions import override
 
+from vault_autopilot.service.abstract import ApplyResult
+
 from .. import dto
 from ..dispatcher import event
 from ..service import SecretsEngineService
@@ -34,9 +36,11 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
 
         try:
             result = await self.secrets_engine_svc.apply(payload)
-        except Exception:
-            ev = event.SecretsEngineCreateError(payload)
-            raise
+        except Exception as exc:
+            ev, result = (
+                event.SecretsEngineCreateError(payload),
+                ApplyResult(status="create_error", errors=(exc,)),
+            )
         else:
             match result.get("status"):
                 case "verify_success":
@@ -56,3 +60,6 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
         finally:
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
+
+        if errors := result.get("errors"):
+            raise ExceptionGroup("Failed to apply secrets engine", errors)

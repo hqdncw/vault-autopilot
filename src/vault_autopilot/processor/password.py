@@ -123,18 +123,36 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, PasswordNode), node
 
-        await self.observer.trigger(event.PasswordApplicationInitiated(node.payload))
+        payload = node.payload
+
+        await self.observer.trigger(event.PasswordApplicationInitiated(payload))
 
         try:
-            result = await self.pwd_svc.apply(node.payload)
-        except Exception as ex:
-            result = ApplyResult(status="verify_error", errors=(ex,))
-
-        logger.debug("applying finished %r", node.payload.absolute_path())
-
-        await self.observer.trigger(
-            APPLY_STATUS_EVENT_MAP[result["status"]](node.payload)
-        )
+            result = await self.pwd_svc.apply(payload)
+        except Exception as exc:
+            ev, result = (
+                event.PasswordCreateError(payload),
+                ApplyResult(status="create_error", errors=(exc,)),
+            )
+        else:
+            match result.get("status"):
+                case "verify_success":
+                    ev = event.PasswordVerifySuccess(payload)
+                case "verify_error":
+                    ev = event.PasswordVerifyError(payload)
+                case "update_success":
+                    ev = event.PasswordUpdateSuccess(payload)
+                case "update_error":
+                    ev = event.PasswordUpdateError(payload)
+                case "create_success":
+                    ev = event.PasswordCreateSuccess(payload)
+                case "create_error":
+                    ev = event.PasswordCreateError(payload)
+                case _ as status:
+                    raise NotImplementedError(status)
+        finally:
+            logger.debug("applying finished %r", payload.absolute_path())
+            await self.observer.trigger(ev)
 
         if errors := result.get("errors"):
             raise ExceptionGroup("Failed to apply password", errors)

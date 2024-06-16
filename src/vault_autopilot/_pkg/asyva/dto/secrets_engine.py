@@ -53,5 +53,5 @@ class SecretsEngineTuneMountConfigurationDTO(SecretsEngineCommonFields):
     description: NotRequired[str]
 
 
-class SecretsEngineGetDTO(TypedDict):
+class SecretsEngineReadDTO(TypedDict):
     path: str

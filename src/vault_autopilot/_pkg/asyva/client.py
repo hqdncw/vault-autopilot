@@ -145,7 +145,7 @@ class Client:
         References:
             https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
         """
-        return await self._kvv2_mgr.update_or_create(payload)
+        return await self._kvv2_mgr.update_or_create(**payload)
 
     @overload
     async def update_or_create_password_policy(
@@ -221,100 +221,106 @@ class Client:
     async def generate_root(
         self, **payload: Unpack[dto.IssuerGenerateRootDTO]
     ) -> pki.GenerateRootResult:
-        return await self._pki_mgr.generate_root(payload)
+        return await self._pki_mgr.generate_root(**payload)
 
     @exception_handler
     @login_required
     async def generate_intermediate_csr(
         self, **payload: Unpack[dto.IssuerGenerateIntmdCSRDTO]
     ) -> pki.GenerateIntmdCSRResult:
-        return await self._pki_mgr.generate_intmd_csr(payload)
+        return await self._pki_mgr.generate_intmd_csr(**payload)
 
     @exception_handler
     @login_required
     async def sign_intermediate(
         self, **payload: Unpack[dto.IssuerSignIntmdDTO]
     ) -> pki.SignIntmdResult:
-        return await self._pki_mgr.sign_intmd(payload)
+        return await self._pki_mgr.sign_intmd(**payload)
 
     @exception_handler
     @login_required
     async def set_signed_intermediate(
         self, **payload: Unpack[dto.IssuerSetSignedIntmdDTO]
     ) -> pki.SetSignedIntmdResult:
-        return await self._pki_mgr.set_signed_intmd(payload)
+        return await self._pki_mgr.set_signed_intmd(**payload)
 
     @exception_handler
     @login_required
-    async def update_key(self, **payload: Unpack[dto.KeyUpdateDTO]) -> None:
-        return await self._pki_mgr.update_key(payload)
+    async def update_pki_key(self, **payload: Unpack[dto.KeyUpdateDTO]) -> None:
+        return await self._pki_mgr.update_key(**payload)
 
     @exception_handler
     @login_required
     async def update_issuer(
         self, **payload: Unpack[dto.IssuerUpdateDTO]
-    ) -> pki.UpdateResult:
-        return await self._pki_mgr.update_issuer(payload)
+    ) -> pki.IssuerUpdateResult:
+        return await self._pki_mgr.update_issuer(**payload)
 
     @exception_handler
     @login_required
-    async def get_issuer(
-        self, **payload: Unpack[dto.IssuerGetDTO]
-    ) -> pki.GetResult | None:
-        return await self._pki_mgr.get_issuer(payload)
+    async def read_issuer(
+        self, **payload: Unpack[dto.IssuerReadDTO]
+    ) -> pki.IssuerReadResult | None:
+        return await self._pki_mgr.read_issuer(**payload)
 
     @exception_handler
     @login_required
     async def update_or_create_pki_role(
         self, **payload: Unpack[dto.PKIRoleCreateDTO]
     ) -> None:
-        return await self._pki_mgr.update_or_create_role(payload)
+        return await self._pki_mgr.update_or_create_role(**payload)
+
+    @login_required
+    async def read_pki_role(
+        self, **payload: Unpack[dto.PKIRoleReadDTO]
+    ) -> pki.RoleReadResult | None:
+        return await self._pki_mgr.read_role(**payload)
 
     @exception_handler
     @login_required
     async def enable_secrets_engine(
         self, **payload: Unpack[dto.SecretsEngineEnableDTO]
     ) -> None:
-        return await self._sb_mgr.enable_secrets_engine(payload)
+        return await self._sb_mgr.enable_secrets_engine(**payload)
 
     @exception_handler
     @login_required
     async def configure_secrets_engine(
         self, **payload: Unpack[dto.SecretsEngineConfigureDTO]
     ) -> None:
-        return await self._kvv2_mgr.configure_secret_engine(payload)
+        return await self._kvv2_mgr.configure_secret_engine(**payload)
 
     @exception_handler
     @login_required
     async def tune_mount_configuration(
         self, **payload: Unpack[dto.SecretsEngineTuneMountConfigurationDTO]
     ) -> None:
-        return await self._sb_mgr.tune_mount_configuration(payload)
+        return await self._sb_mgr.tune_mount_configuration(**payload)
 
     @exception_handler
     @login_required
     async def read_mount_configuration(
-        self, **payload: Unpack[dto.SecretsEngineGetDTO]
+        self, **payload: Unpack[dto.SecretsEngineReadDTO]
     ) -> system_backend.ReadMountConfigurationResult | None:
-        return await self._sb_mgr.read_mount_configuration(payload)
+        return await self._sb_mgr.read_mount_configuration(**payload)
 
     @exception_handler
     @login_required
     async def read_kv_configuration(
-        self, **payload: Unpack[dto.SecretsEngineGetDTO]
+        self, **payload: Unpack[dto.SecretsEngineReadDTO]
     ) -> kvv2.ReadConfigurationResult | None:
-        return await self._kvv2_mgr.read_configuration(payload)
+        return await self._kvv2_mgr.read_configuration(**payload)
 
     @exception_handler
     @login_required
     async def read_kv_metadata(
-        self, **payload: Unpack[dto.SecretGetDTO]
+        self, **payload: Unpack[dto.SecretReadDTO]
     ) -> kvv2.ReadMetadataResult:
-        return await self._kvv2_mgr.read_metadata(payload)
+        return await self._kvv2_mgr.read_metadata(**payload)
 
     @exception_handler
     @login_required
     async def update_or_create_metadata(
         self, **payload: Unpack[dto.SecretUpdateOrCreateMetadata]
     ) -> None:
-        return await self._kvv2_mgr.update_or_create_metadata(payload)
+        return await self._kvv2_mgr.update_or_create_metadata(**payload)

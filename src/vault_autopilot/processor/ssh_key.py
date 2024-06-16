@@ -4,6 +4,8 @@ from typing import Iterable, Sequence
 
 from typing_extensions import override
 
+from vault_autopilot.service.abstract import ApplyResult
+
 from .. import dto, util
 from ..dispatcher import event
 from ..service import SSHKeyService
@@ -94,9 +96,11 @@ class SSHKeyApplyProcessor(
 
         try:
             result = await self.ssh_key_svc.apply(payload)
-        except Exception:
-            ev = event.SSHKeyCreateError(payload)
-            raise
+        except Exception as exc:
+            ev, result = (
+                event.SSHKeyCreateError(payload),
+                ApplyResult(status="create_error", errors=(exc,)),
+            )
         else:
             match result.get("status"):
                 case "verify_success":
@@ -117,5 +121,5 @@ class SSHKeyApplyProcessor(
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
 
-            if errors := result.get("errors"):
-                raise ExceptionGroup("Failed to apply issuer", errors)
+        if errors := result.get("errors"):
+            raise ExceptionGroup("Failed to apply ssh key", errors)

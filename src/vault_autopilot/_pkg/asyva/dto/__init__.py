@@ -1,35 +1,36 @@
 from .issuer import (
     IssuerGenerateIntmdCSRDTO,
     IssuerGenerateRootDTO,
-    IssuerGetDTO,
+    IssuerReadDTO,
     IssuerSetSignedIntmdDTO,
     IssuerSignIntmdDTO,
     IssuerUpdateDTO,
     KeyUpdateDTO,
 )
-from .pki_role import PKIRoleCreateDTO
-from .secret import SecretCreateDTO, SecretGetDTO, SecretUpdateOrCreateMetadata
+from .pki_role import PKIRoleCreateDTO, PKIRoleReadDTO
+from .secret import SecretCreateDTO, SecretReadDTO, SecretUpdateOrCreateMetadata
 from .secrets_engine import (
     SecretsEngineConfigureDTO,
     SecretsEngineEnableDTO,
-    SecretsEngineGetDTO,
+    SecretsEngineReadDTO,
     SecretsEngineTuneMountConfigurationDTO,
 )
 
 __all__ = (
     "IssuerGenerateIntmdCSRDTO",
     "IssuerGenerateRootDTO",
-    "IssuerGetDTO",
+    "IssuerReadDTO",
     "IssuerSetSignedIntmdDTO",
     "IssuerSignIntmdDTO",
     "IssuerUpdateDTO",
     "KeyUpdateDTO",
     "SecretCreateDTO",
-    "SecretGetDTO",
+    "SecretReadDTO",
     "SecretUpdateOrCreateMetadata",
     "PKIRoleCreateDTO",
+    "PKIRoleReadDTO",
     "SecretsEngineEnableDTO",
     "SecretsEngineConfigureDTO",
     "SecretsEngineTuneMountConfigurationDTO",
-    "SecretsEngineGetDTO",
+    "SecretsEngineReadDTO",
 )

@@ -5,6 +5,8 @@ from typing import Sequence
 
 from typing_extensions import override
 
+from vault_autopilot.service.abstract import ApplyResult
+
 from .. import dto
 from ..dispatcher import event
 from ..service import PKIRoleService
@@ -85,15 +87,38 @@ class PKIRoleApplyProcessor(
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, PKIRoleNode), node
 
-        await self.observer.trigger(event.PKIRoleApplicationInitiated(node.payload))
+        payload = node.payload
 
-        # TODO: VerifySuccess, VerifyError, UpdateSuccess, UpdateError
+        await self.observer.trigger(event.PKIRoleApplicationInitiated(payload))
+
+        result = {}
+
         try:
-            await self.pki_role_svc.update_or_create(node.payload)
-        except Exception:
-            await self.observer.trigger(event.PKIRoleCreateError(node.payload))
-            raise
+            result = await self.pki_role_svc.apply(payload)
+        except Exception as exc:
+            ev, result = (
+                event.PKIRoleCreateError(payload),
+                ApplyResult(status="create_error", errors=(exc,)),
+            )
+        else:
+            match result.get("status"):
+                case "verify_success":
+                    ev = event.PKIRoleVerifySuccess(payload)
+                case "verify_error":
+                    ev = event.PKIRoleVerifyError(payload)
+                case "update_success":
+                    ev = event.PKIRoleUpdateSuccess(payload)
+                case "update_error":
+                    ev = event.PKIRoleUpdateError(payload)
+                case "create_success":
+                    ev = event.PKIRoleCreateSuccess(payload)
+                case "create_error":
+                    ev = event.PKIRoleCreateError(payload)
+                case _ as status:
+                    raise NotImplementedError(status)
+        finally:
+            logger.debug("applying finished %r", payload.absolute_path())
+            await self.observer.trigger(ev)
 
-        logger.debug("applying finished %r", node.payload.absolute_path())
-
-        await self.observer.trigger(event.PKIRoleCreateSuccess(node.payload))
+        if errors := result.get("errors"):
+            raise ExceptionGroup("Failed to apply pki role", errors)

@@ -114,8 +114,7 @@ class IssuerSetSignedIntmdDTO(MountPathField):
     certificate: str
 
 
-class IssuerGetDTO(MountPathField, IssuerRefField):
-    pass
+class IssuerReadDTO(MountPathField, IssuerRefField): ...
 
 
 class KeyUpdateDTO(MountPathField):

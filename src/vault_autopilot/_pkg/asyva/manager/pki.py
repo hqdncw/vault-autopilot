@@ -1,13 +1,14 @@
-import http
+from http import HTTPStatus
 from typing import Any, NoReturn, NotRequired
 
 import aiohttp
 import pydantic
-from typing_extensions import TypedDict, override
+from typing_extensions import TypedDict, Unpack, override
 
+from vault_autopilot._pkg.asyva.dto.pki_role import PKIRoleFields
 from vault_autopilot._pkg.asyva.exc import IssuerNameTakenError, VaultAPIError
 
-from .... import util
+from ....util.model import model_dump_json
 from .. import constants, dto
 from ..dto import issuer
 from .base import AbstractResult, BaseManager
@@ -18,8 +19,8 @@ __all__ = (
     "GenerateRootResult",
     "SignIntmdResult",
     "SetSignedIntmdResult",
-    "UpdateResult",
-    "GetResult",
+    "IssuerUpdateResult",
+    "IssuerReadResult",
 )
 
 
@@ -71,7 +72,7 @@ class SetSignedIntmdResult(AbstractResult):
     data: Data
 
 
-class UpdateResult(AbstractResult):
+class IssuerUpdateResult(AbstractResult):
     class Data(TypedDict):
         ca_chain: list[str]
         certificate: str
@@ -90,16 +91,20 @@ class UpdateResult(AbstractResult):
 
     @override
     @classmethod
-    def from_response(cls, data: dict[Any, Any]) -> "UpdateResult":
+    def from_response(cls, data: dict[Any, Any]) -> "IssuerUpdateResult":
         data["data"]["usage"] = data["data"]["usage"].split(",")
         return cls.model_construct(**data)
 
 
-class GetResult(AbstractResult):
-    class Data(UpdateResult.Data):
+class IssuerReadResult(AbstractResult):
+    class Data(IssuerUpdateResult.Data):
         revoked: bool
 
     data: Data
+
+
+class RoleReadResult(AbstractResult):
+    data: PKIRoleFields
 
 
 async def raise_issuer_name_taken_exc(
@@ -118,8 +123,7 @@ async def raise_issuer_name_taken_exc(
 
 class PKIManager(BaseManager):
     async def generate_root(
-        self,
-        payload: dto.IssuerGenerateRootDTO,
+        self, **payload: Unpack[dto.IssuerGenerateRootDTO]
     ) -> GenerateRootResult:
         async with self.new_session() as sess:
             resp = await sess.post(
@@ -128,12 +132,12 @@ class PKIManager(BaseManager):
                     issuer_type="root",
                     cert_type=payload["type"],
                 ),
-                data=util.model.model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
+                data=model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
             )
 
         result = await resp.json() or {}
 
-        if resp.status == http.HTTPStatus.OK:
+        if resp.status == HTTPStatus.OK:
             return GenerateRootResult.from_response(result)
 
         for msg in result.get("errors", {}):
@@ -147,7 +151,7 @@ class PKIManager(BaseManager):
         raise await VaultAPIError.from_response("Failed to create root issuer", resp)
 
     async def generate_intmd_csr(
-        self, payload: dto.IssuerGenerateIntmdCSRDTO
+        self, **payload: Unpack[dto.IssuerGenerateIntmdCSRDTO]
     ) -> GenerateIntmdCSRResult:
         async with self.new_session() as sess:
             resp = await sess.post(
@@ -156,29 +160,29 @@ class PKIManager(BaseManager):
                     issuer_type="intermediate",
                     cert_type=payload["type"],
                 ),
-                data=util.model.model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
+                data=model_dump_json(payload, exclude=GENERATE_QUERY_PARAMS),
             )
 
         result = await resp.json() or {}
 
-        if resp.status == http.HTTPStatus.OK:
+        if resp.status == HTTPStatus.OK:
             return GenerateIntmdCSRResult.from_response(result)
 
         raise await VaultAPIError.from_response(
             "Failed to generate intermediate CSR", resp
         )
 
-    async def sign_intmd(self, payload: dto.IssuerSignIntmdDTO) -> SignIntmdResult:
+    async def sign_intmd(
+        self, **payload: Unpack[dto.IssuerSignIntmdDTO]
+    ) -> SignIntmdResult:
         async with self.new_session() as sess:
             resp = await sess.post(
                 "/v1/%s/issuer/%s/sign-intermediate"
                 % (payload["mount_path"], payload["issuer_ref"]),
-                data=util.model.model_dump_json(
-                    payload, exclude={"mount_path", "issuer_ref"}
-                ),
+                data=model_dump_json(payload, exclude={"mount_path", "issuer_ref"}),
             )
 
-        if resp.status == http.HTTPStatus.OK:
+        if resp.status == HTTPStatus.OK:
             return SignIntmdResult.from_response(await resp.json() or {})
 
         raise await VaultAPIError.from_response(
@@ -186,7 +190,7 @@ class PKIManager(BaseManager):
         )
 
     async def set_signed_intmd(
-        self, payload: dto.IssuerSetSignedIntmdDTO
+        self, **payload: Unpack[dto.IssuerSetSignedIntmdDTO]
     ) -> SetSignedIntmdResult:
         """
         Set a signed intermediate certificate in Vault.
@@ -197,41 +201,41 @@ class PKIManager(BaseManager):
                 json={"certificate": payload["certificate"]},
             )
 
-        if resp.status == http.HTTPStatus.OK:
+        if resp.status == HTTPStatus.OK:
             return SetSignedIntmdResult.from_response(await resp.json() or {})
 
         raise await VaultAPIError.from_response(
             "Failed to set signed intermediate certificate", resp
         )
 
-    async def update_key(self, payload: dto.KeyUpdateDTO) -> None:
+    async def update_key(self, **payload: Unpack[dto.KeyUpdateDTO]) -> None:
         async with self.new_session() as sess:
             resp = await sess.post(
                 "/v1/%s/key/%s" % (payload["mount_path"], payload["key_ref"]),
                 json={"key_name": payload["key_name"]},
             )
 
-        if resp.status == http.HTTPStatus.OK:
+        if resp.status == HTTPStatus.OK:
             return
 
         raise await VaultAPIError.from_response("Failed to update key", resp)
 
-    async def update_issuer(self, payload: dto.IssuerUpdateDTO) -> UpdateResult:
+    async def update_issuer(
+        self, **payload: Unpack[dto.IssuerUpdateDTO]
+    ) -> IssuerUpdateResult:
         async with self.new_session() as sess:
             resp = await sess.post(
                 "/v1/%s/issuer/%s" % (payload["mount_path"], payload["issuer_ref"]),
-                data=util.model.model_dump_json(
-                    payload, exclude={"mount_path", "issuer_ref"}
-                ),
+                data=model_dump_json(payload, exclude={"mount_path", "issuer_ref"}),
             )
 
         result = await resp.json() or {}
 
-        if resp.status == http.HTTPStatus.OK:
-            return UpdateResult.from_response(result)
+        if resp.status == HTTPStatus.OK:
+            return IssuerUpdateResult.from_response(result)
 
         for msg in result.get("errors", {}):
-            if constants.ISSUER_NAME_TAKEN in result["errors"]:
+            if constants.ISSUER_NAME_TAKEN in msg:
                 await raise_issuer_name_taken_exc(
                     resp,
                     name_collision=payload["issuer_name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
@@ -240,38 +244,59 @@ class PKIManager(BaseManager):
 
         raise await VaultAPIError.from_response("Failed to update Issuer", resp)
 
-    async def update_or_create_role(self, payload: dto.PKIRoleCreateDTO) -> None:
+    async def update_or_create_role(
+        self, **payload: Unpack[dto.PKIRoleCreateDTO]
+    ) -> None:
         async with self.new_session() as sess:
             resp = await sess.post(
-                "/v1/%s/roles/%s" % (payload["mount_path"], payload["issuer_ref"]),
-                data=util.model.model_dump_json(
-                    payload, exclude={"mount_path", "issuer_ref"}
-                ),
+                "/v1/%s/roles/%s" % (payload["mount_path"], payload["name"]),
+                data=model_dump_json(payload, exclude={"mount_path", "name"}),
             )
 
-        if resp.status == http.HTTPStatus.OK:
+        print(resp.status)
+        print(payload)
+
+        if resp.status == HTTPStatus.OK:
             return
 
         raise await VaultAPIError.from_response(
             "Failed to create/update pki role", resp
         )
 
-    async def get_issuer(self, payload: dto.IssuerGetDTO) -> GetResult | None:
+    async def read_issuer(
+        self, mount_path: str, issuer_ref: str
+    ) -> IssuerReadResult | None:
         async with self.new_session() as sess:
-            resp = await sess.get(
-                "/v1/%s/issuer/%s" % (payload["mount_path"], payload["issuer_ref"])
-            )
+            resp = await sess.get("/v1/%s/issuer/%s" % (mount_path, issuer_ref))
 
         result = await resp.json()
 
-        if resp.status == http.HTTPStatus.OK:
-            return GetResult.from_response(result)
+        if resp.status == HTTPStatus.OK:
+            return IssuerReadResult.from_response(result)
 
         for msg in result.get("errors", {}):
             if constants.ISSUER_NOT_FOUND in msg:
-                if not resp.status == http.HTTPStatus.INTERNAL_SERVER_ERROR:
+                if not resp.status == HTTPStatus.INTERNAL_SERVER_ERROR:
                     continue
 
                 return None
 
-        raise await VaultAPIError.from_response("Failed to get issuer", resp)
+        raise await VaultAPIError.from_response("Failed to read issuer", resp)
+
+    async def read_role(
+        self, **payload: Unpack[dto.PKIRoleReadDTO]
+    ) -> RoleReadResult | None:
+        async with self.new_session() as sess:
+            resp = await sess.get(
+                "/v1/%s/roles/%s" % (payload["mount_path"], payload["name"]),
+            )
+
+        print(resp.status)
+
+        if resp.status == HTTPStatus.OK:
+            return RoleReadResult.from_response(await resp.json() or {})
+
+        if resp.status == HTTPStatus.NOT_FOUND:
+            return
+
+        raise await VaultAPIError.from_response("Failed to read pki role", resp)

@@ -2,6 +2,8 @@ from http import HTTPStatus
 from os import path
 from typing import NotRequired
 
+from typing_extensions import Unpack
+
 from vault_autopilot._pkg.asyva import constants
 from vault_autopilot._pkg.asyva.exc import (
     SecretsEnginePathInUseError,
@@ -26,7 +28,9 @@ class ReadMountConfigurationResult(AbstractResult):
 
 
 class SystemBackendManager(BaseManager):
-    async def enable_secrets_engine(self, payload: dto.SecretsEngineEnableDTO) -> None:
+    async def enable_secrets_engine(
+        self, **payload: Unpack[dto.SecretsEngineEnableDTO]
+    ) -> None:
         """
         References:
             https://developer.hashicorp.com/vault/api-docs/system/mounts#enable-secrets-engine
@@ -62,7 +66,7 @@ class SystemBackendManager(BaseManager):
         raise await VaultAPIError.from_response("Failed to enable secrets engine", resp)
 
     async def tune_mount_configuration(
-        self, payload: dto.SecretsEngineTuneMountConfigurationDTO
+        self, **payload: Unpack[dto.SecretsEngineTuneMountConfigurationDTO]
     ) -> None:
         """
         References:
@@ -82,7 +86,7 @@ class SystemBackendManager(BaseManager):
         )
 
     async def read_mount_configuration(
-        self, payload: dto.SecretsEngineGetDTO
+        self, **payload: Unpack[dto.SecretsEngineReadDTO]
     ) -> ReadMountConfigurationResult | None:
         """
         References:

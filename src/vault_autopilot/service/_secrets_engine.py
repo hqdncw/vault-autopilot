@@ -14,7 +14,7 @@ from vault_autopilot._pkg.asyva.manager.system_backend import (
 from .. import dto
 from .._pkg import asyva
 from ..service.abstract import ApplyResult
-from ..util.model import model_dump
+from ..util.model import model_dump, recursive_dict_filter
 
 logger = getLogger(__name__)
 
@@ -42,27 +42,6 @@ ENABLE_FIELDS = (
     "external_entropy_access",
     "options",
 )
-
-
-def recursive_dict_filter(dict1: Any, dict2: Any) -> dict[Any, Any]:
-    """
-    Example::
-
-        dict1 = {'a': 1, 'b': 2, 'c': {'d': 3, 'e': 4}, 'f': 5}
-        dict2 = {'a': 1, 'c': {'d': 3}}
-
-        result = recursive_dict_filter(dict1, dict2)
-
-        print(result)  # Output: {'a': 1, 'c': {'d': 3}}
-    """
-    result = {}
-    for k, v in dict1.items():
-        if k in dict2:
-            if isinstance(v, dict):
-                result[k] = recursive_dict_filter(v, dict2.get(k, {}))
-            else:
-                result[k] = v
-    return result
 
 
 @dataclass(slots=True)
@@ -137,8 +116,8 @@ class SecretsEngineService:
             )
 
         return DeepDiff(
-            snapshot.__dict__,
-            payload.__dict__,
+            snapshot,
+            payload,
             ignore_order=True,
             verbose_level=2,
         )

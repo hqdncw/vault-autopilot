@@ -1,8 +1,10 @@
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
+from logging import getLogger
 from typing import Any, Generic, Literal, NotRequired, TypedDict, TypeVar
 
+from cryptography.utils import cached_property
 from deepdiff import DeepDiff
 
 from vault_autopilot._pkg.asyva import Client as AsyvaClient
@@ -14,11 +16,13 @@ from vault_autopilot.exc import (
     SnapshotMismatchError,
 )
 
-from ..dto.abstract import VersionedSecretApplyDTO
+from ..dto.abstract import AbstractDTO, VersionedSecretApplyDTO
 
-__all__ = ("VersionedSecretApplyMixin",)
+__all__ = ("VersionedSecretApplyMixin", "ResourceApplyMixin")
 
 T = TypeVar("T", bound=VersionedSecretApplyDTO)
+P = TypeVar("P", bound=AbstractDTO)
+S = TypeVar("S")
 ApplyResultStatus = Literal[
     "verify_success",
     "create_success",
@@ -28,10 +32,53 @@ ApplyResultStatus = Literal[
     "update_error",
 ]
 
+logger = getLogger(__name__)
+
 
 class ApplyResult(TypedDict):
     status: ApplyResultStatus
     errors: NotRequired[tuple[Exception, ...]]
+
+
+@dataclass(slots=True)
+class ResourceApplyMixin(Generic[P, S]):
+    client: AsyvaClient
+
+    @abstractmethod
+    async def build_snapshot(self, payload: P) -> S | None: ...
+
+    @abstractmethod
+    def diff(self, payload: P, snapshot: S) -> dict[str, Any]: ...
+
+    @cached_property
+    @abstractmethod
+    def update_or_create_executor(self): ...
+
+    async def apply(self, payload: P) -> ApplyResult:
+        snapshot = await self.build_snapshot(payload)
+
+        is_create = snapshot is None
+
+        if not is_create and (diff := self.diff(payload, snapshot)):
+            logger.debug("[%s] diff: %r", self.__class__.__name__, diff)
+            is_update = bool(diff)
+        else:
+            is_update = False
+
+        if not (is_create or is_update):
+            return ApplyResult(status="verify_success")
+
+        try:
+            await self.update_or_create_executor(payload)
+        except Exception as exc:
+            return ApplyResult(
+                status="create_error" if is_create else "update_error", errors=(exc,)
+            )
+
+        if is_create:
+            return ApplyResult(status="create_success")
+        else:
+            return ApplyResult(status="update_success")
 
 
 @dataclass(slots=True)
@@ -53,8 +100,8 @@ class VersionedSecretApplyMixin(Generic[T]):
             )
 
         return DeepDiff(
-            json.loads(snapshot) or {},
-            payload.__dict__,
+            type(payload)(**(json.loads(snapshot) or {})),
+            payload,
             ignore_order=True,
             verbose_level=2,
         )
