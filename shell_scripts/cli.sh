@@ -4,6 +4,5 @@
 # the Vault Autopilot CLI. It's especially handy for developers who want to
 # test the CLI directly from the source files.
 
-export PYTHONPATH="${PYTHONPATH}:${PWD}/src"
-source ./.venv/bin/activate
+. "./shell_scripts/activate_venv.sh"
 python3 src/vault_autopilot "$@"
