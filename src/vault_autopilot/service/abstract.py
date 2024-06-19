@@ -6,6 +6,7 @@ from typing import Any, Generic, Literal, NotRequired, TypedDict, TypeVar
 
 from cryptography.utils import cached_property
 from deepdiff import DeepDiff
+from humps import camelize
 
 from vault_autopilot._pkg.asyva import Client as AsyvaClient
 from vault_autopilot._pkg.asyva.exc import CASParameterMismatchError
@@ -100,7 +101,7 @@ class VersionedSecretApplyMixin(Generic[T]):
             )
 
         return DeepDiff(
-            type(payload)(**(json.loads(snapshot) or {})),
+            type(payload)(**camelize(json.loads(snapshot) or {})),
             payload,
             ignore_order=True,
             verbose_level=2,

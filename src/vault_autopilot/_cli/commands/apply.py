@@ -441,24 +441,7 @@ def apply(
     recursive: bool,
 ) -> None:
     """
-    Apply a manifest to a Vault server by file name, directory, or stdin.
-
-    This command modifies Vault secrets using resources defined in a YAML manifest.
-    The manifest specifies the desired state of the resources, and Autopilot ensures
-    the actual state matches the desired state.
-
-    Manifest Format:
-
-    \b
-      A Vault Autopilot manifest is a configuration file written in YAML that tells
-      Autopilot what resources you want to create, update, or check on a Vault Server.
-    \b
-      Each resource in the manifest has three important fields: apiVersion, kind, and
-      spec. The apiVersion field specifies the API version of the resource, the kind
-      field identifies the type of resource, and the spec field contains the
-      specifications for the resource. Think of a manifest as a blueprint for your Vault
-      Server - it defines the desired state of your resources, and Autopilot works to
-      ensure that the actual state matches the desired state defined in the manifest.
+    Apply a manifest to a Vault server from a file, directory, or standard input.
 
     Examples:
 
