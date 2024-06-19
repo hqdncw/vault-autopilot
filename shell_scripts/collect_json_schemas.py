@@ -1,13 +1,9 @@
 import json
-import os
-import sys
 from pathlib import Path
 
 from pydantic.json_schema import model_json_schema
 from vault_autopilot import dto
 from vault_autopilot._conf import Settings
-
-sys.path.insert(0, os.path.abspath("./src"))
 
 
 def execute(output_dir: str):
