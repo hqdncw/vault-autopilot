@@ -163,10 +163,6 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
         """
         Flushes the pending downstreams of a given node in the dependency chain.
 
-        Warning:
-            This method only flushes downstreams that have all their edges with status
-            'satisfied', except for the edge coming from the given node.
-
         Args:
             node: The node whose downstreams are to be flushed.
 
