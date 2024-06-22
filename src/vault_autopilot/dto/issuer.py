@@ -29,7 +29,7 @@ class IssuerApplyDTO(AbstractDTO):
         name: str
         secrets_engine_path: str
         certificate: Certificate
-        options: Options
+        options: NotRequired[Options]
         chaining: NotRequired[Chaining]
         # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
 
