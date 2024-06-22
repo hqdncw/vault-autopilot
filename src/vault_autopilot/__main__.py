@@ -69,6 +69,7 @@ def cli(ctx: click.Context, debug: bool, config: ConfigOption) -> None:
     ctx.obj = lazy_object_proxy.Proxy(lambda: validate_config(ctx=ctx, fn=config))
 
 
+cli.add_command(apply)
+
 if __name__ == "__main__":
-    cli.add_command(apply)
     cli(auto_envvar_prefix="VAULT_AUTOPILOT")

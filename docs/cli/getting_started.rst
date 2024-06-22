@@ -27,6 +27,7 @@ running the following command:
    docker run --cap-add=IPC_LOCK -d --name=dev-vault \
    -e VAULT_DEV_ROOT_TOKEN_ID="insecure-dev-only-token" \
    -e VAULT_DEV_LISTEN_ADDRESS="0.0.0.0:8200" \
+   --network host \
    hashicorp/vault server -dev
 
 This will start a development-mode Vault server, which is suitable for testing
@@ -195,7 +196,9 @@ To apply the manifest to your Vault server, run the following command:
 
 .. prompt:: bash
 
-   vault-autopilot -c ./config.yaml apply -f ./manifest.yaml
+   docker run --rm --network host \
+   -v $PWD:/srv/vault-autopilot hqdncw/vault-autopilot \
+   -c config.yaml apply -f manifest.yaml
 
 Output:
 
@@ -254,7 +257,7 @@ Output:
    Key                Value
    ---                -----
    created_time       2024-06-17T10:41:19.822630332Z
-   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secrets_engine_path":"kv","path":"hello","encoding":"utf8","version":1,"secret_key":"foo","policy_path":"example"},"kind":"Password"}]
+   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secretsEngine_path":"kv","path":"hello","encoding":"utf8","version":1,"secretKey":"foo","policyPath":"example"},"kind":"Password"}]
    deletion_time      n/a
    destroyed          false
    version            1
@@ -322,7 +325,9 @@ again to apply the changes to your Vault server:
 
 .. code:: bash
 
-  $ vault-autopilot apply -c ./config.yaml apply -f ./manifest.yaml
+  $ docker run --rm --network host \
+  -v $PWD:/srv/vault-autopilot hqdncw/vault-autopilot \
+  apply -c config.yaml apply -f manifest.yaml
   [+] Applying manifests (0.0251 seconds) FINISHED
    => Verifying integrity of Password 'kv/hello'... done
    => Updating PasswordPolicy 'example'... done

@@ -1,19 +1,15 @@
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
 [project]
 name = "vault-autopilot"
 description = "Effortlessly manage your secrets and other Vault resources with the power of automation."
 readme = "README.md"
 requires-python = ">=3.11"
-license-files = { paths = ["LICENSE"] }
 authors = [
   { name = "hqdncw", email = "hqdncw@gmail.com" },
 ]
 keywords = [
   "hashicorp vault",
 ]
+license = {text = "MIT"}
 # https://pypi.org/classifiers/
 classifiers = [
   "License :: OSI Approved :: MIT License",
@@ -62,6 +58,11 @@ dev = [
   "mypy~=1.10.0",
   "pre-commit~=3.7.0"
 ]
+build = [
+  "wheel",
+  "setuptools",
+  "build"
+]
 docs = [
   "sphinx~=7.3.7",
   "sphinx-sitemap~=2.6.0",
@@ -74,6 +75,9 @@ docs = [
   # "sphinx-autoapi~=3.0.0"
   "sphinx-click~=6.0.0"
 ]
+
+[project.scripts]
+vault-autopilot = "vault_autopilot.__main__:cli"
 
 [tool.black]
 line-length = 88
