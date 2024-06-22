@@ -159,7 +159,7 @@ class SecretsEngineService:
                     tune_options,
                 )
             except Exception as ex:
-                return ApplyResult(status="create_error", errors=(ex,))
+                return ApplyResult(status="create_error", error=ex)
             else:
                 return ApplyResult(status="create_success")
 
@@ -178,7 +178,7 @@ class SecretsEngineService:
                 # TODO: update modified fields only
                 await self.update(configure_options, tune_options)
             except Exception as ex:
-                return ApplyResult(status="update_error", errors=(ex,))
+                return ApplyResult(status="update_error", error=ex)
 
             return ApplyResult(status="update_success")
 
