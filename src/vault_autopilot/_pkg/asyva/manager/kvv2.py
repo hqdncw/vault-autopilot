@@ -54,9 +54,9 @@ class ReadMetadataResult(AbstractResult):
     data: Data
 
 
-class KVV2Manager(BaseManager):
+class KvV2Manager(BaseManager):
     async def update_or_create(
-        self, **payload: Unpack[dto.SecretCreateDTO]
+        self, **payload: Unpack[dto.KvV2SecretCreateDTO]
     ) -> UpdateOrCreateResult:
         """
         References:

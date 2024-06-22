@@ -2,17 +2,17 @@ from abc import abstractmethod
 from typing import Annotated
 
 import annotated_types
-import pydantic.alias_generators
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 from typing_extensions import TypedDict
 
 from vault_autopilot.util.encoding import Encoding
 
 
 class AbstractDTO(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=pydantic.alias_generators.to_camel, extra="forbid"
-    )
+    model_config = ConfigDict(alias_generator=to_camel, extra="forbid")
+
+    kind: str
 
     @abstractmethod
     def absolute_path(self) -> str: ...
@@ -22,7 +22,7 @@ class SecretApplyDTO(AbstractDTO):
     class Spec(TypedDict):
         secrets_engine: str
         path: str
-        encoding: Annotated[Encoding, pydantic.Field(default="utf8")]
+        encoding: Annotated[Encoding, Field(default="utf8")]
 
     spec: Spec
 

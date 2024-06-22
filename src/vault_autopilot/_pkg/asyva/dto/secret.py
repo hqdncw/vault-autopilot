@@ -3,11 +3,14 @@ from typing import Any, NotRequired
 from typing_extensions import TypedDict
 
 
-class SecretCreateDTO(TypedDict):
+class KvV1SecretCreateDTO(TypedDict):
     path: str
     data: dict[str, Any]
-    cas: NotRequired[int]
     mount_path: str
+
+
+class KvV2SecretCreateDTO(KvV1SecretCreateDTO):
+    cas: NotRequired[int]
 
 
 class SecretReadDTO(TypedDict):

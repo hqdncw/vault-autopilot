@@ -98,7 +98,7 @@ class PKIRoleApplyProcessor(
         except Exception as exc:
             ev, result = (
                 event.PKIRoleCreateError(payload),
-                ApplyResult(status="create_error", errors=(exc,)),
+                ApplyResult(status="create_error", error=exc),
             )
         else:
             match result.get("status"):
@@ -120,5 +120,5 @@ class PKIRoleApplyProcessor(
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
 
-        if errors := result.get("errors"):
-            raise ExceptionGroup("Failed to apply pki role", errors)
+        if error := result.get("error"):
+            raise error

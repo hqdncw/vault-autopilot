@@ -132,7 +132,7 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
         except Exception as exc:
             ev, result = (
                 event.PasswordCreateError(payload),
-                ApplyResult(status="create_error", errors=(exc,)),
+                ApplyResult(status="create_error", error=exc),
             )
         else:
             match result.get("status"):
@@ -154,5 +154,5 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
 
-        if errors := result.get("errors"):
-            raise ExceptionGroup("Failed to apply password", errors)
+        if error := result.get("error"):
+            raise error

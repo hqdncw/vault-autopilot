@@ -16,7 +16,7 @@ from typing_extensions import Unpack
 
 from . import authenticator, composer, dto
 from .dto.password_policy import PasswordPolicy
-from .manager import kvv2, password_policy, pki, system_backend
+from .manager import kvv1, kvv2, password_policy, pki, system_backend
 from .util.hcl import deseralize_password_policy
 
 P = ParamSpec("P")
@@ -70,7 +70,8 @@ class Client:
         ),
     )
     _authn_sess: aiohttp.ClientSession | None = field(init=False, default=None)
-    _kvv2_mgr: kvv2.KVV2Manager = field(init=False, default_factory=kvv2.KVV2Manager)
+    _kvv1_mgr: kvv1.KvV1Manager = field(init=False, default_factory=kvv1.KvV1Manager)
+    _kvv2_mgr: kvv2.KvV2Manager = field(init=False, default_factory=kvv2.KvV2Manager)
     _pwd_policy_mgr: password_policy.PasswordPolicyManager = field(
         init=False, default_factory=password_policy.PasswordPolicyManager
     )
@@ -108,6 +109,7 @@ class Client:
             base_url=base_url, token=token, namespace=namespace
         ).create()
 
+        self._kvv1_mgr.configure(sess=self._authn_sess)
         self._kvv2_mgr.configure(sess=self._authn_sess)
         self._pwd_policy_mgr.configure(sess=self._authn_sess)
         self._pki_mgr.configure(sess=self._authn_sess)
@@ -124,8 +126,15 @@ class Client:
 
     @exception_handler
     @login_required
-    async def update_or_create_secret(
-        self, **payload: Unpack[dto.SecretCreateDTO]
+    async def update_or_create_kvv1_secret(
+        self, **payload: Unpack[dto.KvV1SecretCreateDTO]
+    ) -> None:
+        return await self._kvv1_mgr.update_or_create(**payload)
+
+    @exception_handler
+    @login_required
+    async def update_or_create_kvv2_secret(
+        self, **payload: Unpack[dto.KvV2SecretCreateDTO]
     ) -> kvv2.UpdateOrCreateResult:
         """
         Creates a new secret or updates an existing one.
@@ -146,6 +155,13 @@ class Client:
             https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#create-update-secret
         """
         return await self._kvv2_mgr.update_or_create(**payload)
+
+    @exception_handler
+    @login_required
+    async def read_kvv1_secret(
+        self, **payload: Unpack[dto.SecretReadDTO]
+    ) -> kvv1.ReadResult | None:
+        return await self._kvv1_mgr.read(**payload)
 
     @overload
     async def update_or_create_password_policy(

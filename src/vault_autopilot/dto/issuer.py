@@ -7,10 +7,13 @@ from .abstract import AbstractDTO
 
 
 class Certificate(
-    issuer.CommonFields, issuer.KeyGenerationFields, issuer.ManagedKeyFields
-):
-    # TODO: Allow to set `add_basic_constraints` only when the issuer is intermediate
-    add_basic_constraints: NotRequired[bool]
+    issuer.CommonFields,
+    issuer.KeyGenerationFields,
+    issuer.ManagedKeyFields,
+): ...
+
+
+class Options(issuer.IssuerMutableFields): ...
 
 
 class Chaining(TypedDict):
@@ -18,6 +21,7 @@ class Chaining(TypedDict):
     signature_bits: NotRequired[int]
     skid: NotRequired[str]
     use_pss: NotRequired[bool]
+    add_basic_constraints: NotRequired[bool]
 
 
 class IssuerApplyDTO(AbstractDTO):
@@ -25,6 +29,7 @@ class IssuerApplyDTO(AbstractDTO):
         name: str
         secrets_engine: str
         certificate: Certificate
+        options: Options
         chaining: NotRequired[Chaining]
         # TODO: extra_params: NotRequired[issuer.IssuerMutableFields]
 

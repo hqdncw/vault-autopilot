@@ -6,9 +6,6 @@ IssuerType = Literal["root", "intermediate"]
 IssuerCertType = Literal["internal", "exported", "existing", "kms"]
 KeyType = Literal["rsa", "ed25519", "ec"]
 LeafNotAfterBehaviorType = Literal["err", "truncate", "permit"]
-UsageType = set[
-    Literal["read-only", "issuing-certificates", "crl-signing", "ocsp-signing"]
-]
 SignatureAlgorithmType = Literal[
     "MD5WithRSA",
     "SHA1WithRSA",
@@ -76,7 +73,7 @@ class IssuerRefField(TypedDict):
 class IssuerMutableFields(TypedDict):
     leaf_not_after_behavior: NotRequired[LeafNotAfterBehaviorType]
     manual_chain: NotRequired[tuple[str]]
-    usage: NotRequired[UsageType]
+    usage: NotRequired[str]
     revocation_signature_algorithm: NotRequired[SignatureAlgorithmType]
     issuing_certificates: NotRequired[tuple[str]]
     crl_distribution_points: NotRequired[tuple[str]]

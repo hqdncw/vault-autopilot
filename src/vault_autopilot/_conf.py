@@ -1,7 +1,9 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 import pydantic.alias_generators
+from pydantic import Field
 from pydantic.dataclasses import dataclass
+from typing_extensions import TypedDict
 
 from ._pkg import asyva
 
@@ -20,9 +22,18 @@ class TokenAuthMethod(asyva.TokenAuthenticator):
     method: Literal["token"]
 
 
+class VaultSecretStorage(TypedDict):
+    type: Literal["kvv1-secret"]
+    secrets_engine_path: Annotated[
+        str, Field(default="hqdncw.github.io/vault-autopilot/user-data")
+    ]
+    snapshots_secret_path: Annotated[str, Field(default="snapshots")]
+
+
 @dataclass(slots=True, config=_config)
 class Settings:
     base_url: str
+    storage: VaultSecretStorage
     auth: KubernetesAuthMethod | TokenAuthMethod = pydantic.Field(
         discriminator="method"
     )

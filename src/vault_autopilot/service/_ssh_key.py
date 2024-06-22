@@ -49,7 +49,7 @@ class SSHKeyService(abstract.VersionedSecretApplyMixin[dto.SSHKeyApplyDTO]):
         )
 
         # may raise a CASParameterMismatchError
-        _ = await self.client.update_or_create_secret(
+        _ = await self.client.update_or_create_kvv2_secret(
             path=spec["path"],
             data={
                 private_key.get("private_key", "private_key"): encode(

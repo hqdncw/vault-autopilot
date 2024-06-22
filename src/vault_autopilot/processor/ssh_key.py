@@ -99,7 +99,7 @@ class SSHKeyApplyProcessor(
         except Exception as exc:
             ev, result = (
                 event.SSHKeyCreateError(payload),
-                ApplyResult(status="create_error", errors=(exc,)),
+                ApplyResult(status="create_error", error=exc),
             )
         else:
             match result.get("status"):
@@ -121,5 +121,5 @@ class SSHKeyApplyProcessor(
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
 
-        if errors := result.get("errors"):
-            raise ExceptionGroup("Failed to apply ssh key", errors)
+        if error := result.get("error"):
+            raise error

@@ -134,7 +134,10 @@ class ResourceNotFoundError(InvalidRequestError):
     ctx: Context
 
 
-PasswordPolicyNotFoundError = ResourceNotFoundError
+class PasswordPolicyNotFoundError(ResourceNotFoundError): ...
+
+
+class IssuerNotFoundError(ResourceNotFoundError): ...
 
 
 @dataclass(slots=True, kw_only=True)
@@ -185,5 +188,7 @@ class ResourcePathInUseError(InvalidRequestError):
     ctx: Context
 
 
-IssuerNameTakenError = ResourcePathInUseError
-SecretsEnginePathInUseError = ResourcePathInUseError
+class IssuerNameTakenError(ResourcePathInUseError): ...
+
+
+class SecretsEnginePathInUseError(ResourcePathInUseError): ...

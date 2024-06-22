@@ -39,7 +39,7 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
         except Exception as exc:
             ev, result = (
                 event.SecretsEngineCreateError(payload),
-                ApplyResult(status="create_error", errors=(exc,)),
+                ApplyResult(status="create_error", error=exc),
             )
         else:
             match result.get("status"):
@@ -61,5 +61,5 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
             logger.debug("applying finished %r", payload.absolute_path())
             await self.observer.trigger(ev)
 
-        if errors := result.get("errors"):
-            raise ExceptionGroup("Failed to apply secrets engine", errors)
+        if error := result.get("error"):
+            raise error

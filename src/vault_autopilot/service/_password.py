@@ -33,7 +33,7 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
         value = await self.client.generate_password(policy_path=spec["policy_path"])
 
         # may raise a CASParameterMismatchError
-        _ = await self.client.update_or_create_secret(
+        _ = await self.client.update_or_create_kvv2_secret(
             path=spec["path"],
             data={
                 spec["secret_key"]: encode(

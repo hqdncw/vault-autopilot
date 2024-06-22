@@ -3,12 +3,12 @@ from typing import Any, NoReturn, NotRequired
 
 import aiohttp
 import pydantic
-from typing_extensions import TypedDict, Unpack, override
+from typing_extensions import TypedDict, Unpack
 
 from vault_autopilot._pkg.asyva.dto.pki_role import PKIRoleFields
 from vault_autopilot._pkg.asyva.exc import IssuerNameTakenError, VaultAPIError
 
-from ....util.model import model_dump_json
+from ....util.model import model_dump, model_dump_json
 from .. import constants, dto
 from ..dto import issuer
 from .base import AbstractResult, BaseManager
@@ -81,19 +81,13 @@ class IssuerUpdateResult(AbstractResult):
         key_id: str
         leaf_not_after_behavior: issuer.LeafNotAfterBehaviorType
         manual_chain: Any
-        usage: issuer.UsageType
+        usage: str
         revocation_signature_algorithm: NotRequired[issuer.SignatureAlgorithmType]
         issuing_certificates: NotRequired[list[str]]
         crl_distribution_points: NotRequired[list[str]]
         ocsp_servers: NotRequired[list[str]]
 
     data: Data
-
-    @override
-    @classmethod
-    def from_response(cls, data: dict[Any, Any]) -> "IssuerUpdateResult":
-        data["data"]["usage"] = data["data"]["usage"].split(",")
-        return cls.model_construct(**data)
 
 
 class IssuerReadResult(AbstractResult):
@@ -224,9 +218,10 @@ class PKIManager(BaseManager):
         self, **payload: Unpack[dto.IssuerUpdateDTO]
     ) -> IssuerUpdateResult:
         async with self.new_session() as sess:
-            resp = await sess.post(
+            resp = await sess.patch(
                 "/v1/%s/issuer/%s" % (payload["mount_path"], payload["issuer_ref"]),
-                data=model_dump_json(payload, exclude={"mount_path", "issuer_ref"}),
+                json=model_dump(payload, exclude={"mount_path", "issuer_ref"}),
+                headers={"Content-Type": "application/merge-patch+json"},
             )
 
         result = await resp.json() or {}

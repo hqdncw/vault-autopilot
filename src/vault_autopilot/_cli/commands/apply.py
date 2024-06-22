@@ -1,9 +1,9 @@
 import asyncio
 import glob
-import logging
 import pathlib
 from dataclasses import dataclass, field
 from enum import StrEnum
+from logging import getLogger
 from typing import IO, Any, Iterator, NoReturn, Sequence, Union
 
 import click
@@ -12,6 +12,7 @@ from pydantic import Field
 from rich.console import Group, RenderableType
 from rich.text import Text
 from vault_autopilot import dto
+from vault_autopilot._pkg.asyva.exc import SecretsEnginePathInUseError
 from vault_autopilot.parser import AbstractManifestObject, ManifestParser
 from vault_autopilot.processor.issuer import IssuerApplyProcessor
 from vault_autopilot.processor.password import PasswordApplyProcessor
@@ -19,6 +20,7 @@ from vault_autopilot.processor.password_policy import PasswordPolicyApplyProcess
 from vault_autopilot.processor.pki_role import PKIRoleApplyProcessor
 from vault_autopilot.processor.secrets_engine import SecretsEngineApplyProcessor
 from vault_autopilot.processor.ssh_key import SSHKeyApplyProcessor
+from vault_autopilot.repo.snapshot import SnapshotRepo
 from vault_autopilot.util.dependency_chain import DependencyChain
 
 from ... import _conf, exc
@@ -32,6 +34,7 @@ from ...service import (
     SecretsEngineService,
     SSHKeyService,
 )
+from ...service._issuer import IssuerSnapshot
 from ...util.coro import BoundlessSemaphore
 from ..exc import CLIError
 from ..workflow import AbstractRenderer, AbstractStage, Workflow
@@ -39,7 +42,7 @@ from ..workflow import AbstractRenderer, AbstractStage, Workflow
 __all__ = ["apply"]
 
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -70,7 +73,7 @@ class RecordRenderer(AbstractRenderer):
         return Group(
             *(
                 self._compose_record_content(record)
-                for record in reversed(self._records.values())
+                for record in self._records.values()
             ),
         )
 
@@ -112,7 +115,61 @@ async def async_apply(
     stages = workflow.run()
 
     stage = await stages.__anext__()
-    assert isinstance(stage, ApplyManifestsStage)
+    assert isinstance(stage, ApplyManifestsStage), stage
+
+    issuer_repo = SnapshotRepo[IssuerSnapshot](
+        {},
+        IssuerSnapshot,
+    )
+
+    async def authenticate_client() -> asyva.Client:
+        return await client.authenticate(
+            base_url=settings.base_url,
+            authn=settings.auth,
+            namespace=settings.default_namespace,
+        )
+
+    async def initialize_database() -> None:
+        try:
+            await client.enable_secrets_engine(
+                type="kv-v1",
+                path=settings.storage["secrets_engine_path"],
+                description=(
+                    "Important: Do not modify or delete. This secrets engine is "
+                    "automatically generated and managed by the Vault-Autopilot CLI. "
+                    "Any unauthorized changes may result in resource desynchronization "
+                    "and data loss."
+                ),
+            )
+        except SecretsEnginePathInUseError:
+            logger.debug(
+                "the secrets engine %r is already created",
+                settings.storage["secrets_engine_path"],
+            )
+        else:
+            logger.debug(
+                "the secrets engine %r has been created",
+                settings.storage["secrets_engine_path"],
+            )
+
+        issuer_repo.storage = (
+            raw_data.data
+            if (
+                raw_data := await client.read_kvv1_secret(
+                    mount_path=settings.storage["secrets_engine_path"],
+                    path=settings.storage["snapshots_secret_path"],
+                )
+            )
+            else {}
+        )
+
+    async def flush_database() -> None:
+        if client.is_authenticated and issuer_repo.storage:
+            await client.update_or_create_kvv1_secret(
+                mount_path=settings.storage["secrets_engine_path"],
+                path=settings.storage["snapshots_secret_path"],
+                data=issuer_repo.storage,
+            )
 
     async def configure_dispatcher() -> (
         Dispatcher[ManifestObject | None, event.EventType]
@@ -157,12 +214,7 @@ async def async_apply(
                     raise TypeError("Unexpected payload type: %r" % payload)
 
         dispatcher = Dispatcher[ManifestObject | None, event.EventType](
-            # dispatcher requires authenticated Vault client
-            client=await client.authenticate(
-                base_url=settings.base_url,
-                authn=settings.auth,
-                namespace=settings.default_namespace,
-            ),
+            client=client,
             observer=observer,
             event_builder=event_builder,
             processing_registry={
@@ -174,7 +226,7 @@ async def async_apply(
                     **proc_kwargs(),
                 ),
                 "Issuer": IssuerApplyProcessor(
-                    iss_svc=IssuerService(client),
+                    iss_svc=IssuerService(client, issuer_repo),
                     dep_chain=Mutex(DependencyChain()),
                     **proc_kwargs(),
                 ),
@@ -207,11 +259,6 @@ async def async_apply(
                 "Verifying integrity of {resource_kind} {absolute_path!r}... done",
                 RecordStyle.INFO,
             ),
-            "verify_skipped": (
-                "Verifying integrity of {resource_kind} {absolute_path!r}... SKIPPED"
-                " (not implemented yet)",
-                RecordStyle.INFO,
-            ),
             "verify_error": (
                 "Verifying integrity of {resource_kind} {absolute_path!r}... FAILED",
                 RecordStyle.CRITICAL,
@@ -221,7 +268,7 @@ async def async_apply(
                 RecordStyle.INFO,
             ),
             "update_error": (
-                "Updating {resource_kind} {absolute_path!r}... done",
+                "Updating {resource_kind} {absolute_path!r}... FAILED",
                 RecordStyle.CRITICAL,
             ),
             "create_success": (
@@ -235,17 +282,19 @@ async def async_apply(
         }
 
         async def on_resource_update(
-            ev: Union[event.ResourceApplicationRequested, event.ResourceApplySuccess],
+            ev: Union[
+                event.ResourceApplicationRequested,
+                event.ResourceApplicationInitiated,
+                event.ResourceApplySuccess,
+                event.ResourceApplyError,
+            ],
         ) -> None:
             if isinstance(ev, event.ResourceApplicationRequested):
                 template = TEMPLATE_DICT["application_requested"]
             elif isinstance(ev, event.ResourceApplicationInitiated):
                 return
             elif isinstance(ev, event.ResourceVerifySuccess):
-                if isinstance(ev, (event.IssuerVerifySuccess)):
-                    template = TEMPLATE_DICT["verify_skipped"]
-                else:
-                    template = TEMPLATE_DICT["verify_success"]
+                template = TEMPLATE_DICT["verify_success"]
             elif isinstance(ev, event.ResourceVerifyError):
                 template = TEMPLATE_DICT["verify_error"]
             elif isinstance(ev, event.ResourceUpdateSuccess):
@@ -354,9 +403,16 @@ async def async_apply(
         """Yields an iterator of binary data from standard input."""
         yield click.get_binary_stream("stdin")
 
+    async def handle_manifests():
+        await authenticate_client()
+        await initialize_database()
+        await (await configure_dispatcher()).dispatch()
+
+    err = None
+
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task((await configure_dispatcher()).dispatch())
+            tg.create_task(handle_manifests())
             tg.create_task(
                 ManifestParser(
                     stream_data_from_files() if patterns else stream_data_from_stdin(),
@@ -364,48 +420,53 @@ async def async_apply(
                     queue,
                 ).execute()
             )
-    except ExceptionGroup as ex:
-        workflow.stop(reason="failed")
+    except Exception as ex:
+        err = ex
+
+    try:
+        await flush_database()
+    except Exception as ex:
+        if err is None:
+            err = ex
+
+    if err is not None:
+        workflow.stop("failed")
 
         click.echo("\nOops! Something went wrong while applying the manifests.\n")
 
         while True:
-            if isinstance(ex, ExceptionGroup):
-                ex = ex.exceptions[0]
+            if isinstance(err, ExceptionGroup):
+                err = err.exceptions[0]
                 continue
             break
 
-        if isinstance(ex, asyva.exc.UnauthorizedError):
-            raise CLIError("Authorization failed: %s" % ex) from ex
+        if isinstance(err, asyva.exc.UnauthorizedError):
+            raise CLIError("Authorization failed: %s" % err) from err
 
-        if isinstance(ex, (exc.ManifestError, ConnectionRefusedError)):
-            raise CLIError(str(ex)) from ex
+        if isinstance(err, (exc.ManifestError, ConnectionRefusedError)):
+            raise CLIError(str(err)) from err
 
         if isinstance(
-            ex,
+            err,
             (
                 # TODO: Instead of just saying "Policy not found", provide the user with
                 #  a more informative error message that includes the line number in the
                 #  manifest file where the policy path was defined.
                 asyva.exc.PasswordPolicyNotFoundError,
                 asyva.exc.SecretsEnginePathInUseError,
-                exc.SecretIntegrityError,
+                exc.ResourceIntegrityError,
             ),
         ):
             # TODO: print the contents of a YAML file, highlighting any invalid
             #  lines.
-            raise CLIError(str(ex), exit_code=128) from ex
+            raise CLIError(str(err), exit_code=128) from err
 
-        if isinstance(ex, CLIError):
-            raise ex
+        if isinstance(err, CLIError):
+            raise err
 
-        raise_unexpected_exc(ex)
-    except Exception as e:
-        workflow.stop(reason="failed")
-        raise_unexpected_exc(e)
-    else:
-        workflow.stop(reason="finished")
+        raise_unexpected_exc(err)
 
+    workflow.stop("finished")
     click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
 
 
@@ -461,11 +522,6 @@ def apply(
         raise RuntimeError("Configuration not found")
 
     client = asyva.Client()
-
-    logger.warning(
-        "Verify integrity operation for Issuer, PKIRole, and PasswordPolicy not "
-        "implemented"
-    )
 
     try:
         event_loop.run_until_complete(

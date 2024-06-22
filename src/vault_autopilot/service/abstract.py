@@ -1,8 +1,19 @@
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
+from fnmatch import fnmatch
 from logging import getLogger
-from typing import Any, Generic, Literal, NotRequired, TypedDict, TypeVar
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Coroutine,
+    Generic,
+    Literal,
+    NotRequired,
+    TypedDict,
+    TypeVar,
+)
 
 from cryptography.utils import cached_property
 from deepdiff import DeepDiff
@@ -12,7 +23,8 @@ from vault_autopilot._pkg.asyva import Client as AsyvaClient
 from vault_autopilot._pkg.asyva.exc import CASParameterMismatchError
 from vault_autopilot._pkg.asyva.manager.kvv2 import ReadMetadataResult
 from vault_autopilot.exc import (
-    SecretIntegrityError,
+    ResourceImmutFieldError,
+    ResourceIntegrityError,
     SecretVersionMismatchError,
     SnapshotMismatchError,
 )
@@ -38,12 +50,13 @@ logger = getLogger(__name__)
 
 class ApplyResult(TypedDict):
     status: ApplyResultStatus
-    errors: NotRequired[tuple[Exception, ...]]
+    error: NotRequired[Exception]
 
 
-@dataclass(slots=True)
+@dataclass(kw_only=True)
 class ResourceApplyMixin(Generic[P, S]):
     client: AsyvaClient
+    immutable_field_pats: ClassVar[tuple[str, ...]] = tuple()
 
     @abstractmethod
     async def build_snapshot(self, payload: P) -> S | None: ...
@@ -53,16 +66,45 @@ class ResourceApplyMixin(Generic[P, S]):
 
     @cached_property
     @abstractmethod
-    def update_or_create_executor(self): ...
+    def update_or_create_executor(self) -> Callable[[P], Coroutine[Any, Any, Any]]: ...
+
+    @staticmethod
+    def _create_immut_field_error(
+        diff: dict[Any, Any], payload: P, field_name: str
+    ) -> ResourceImmutFieldError:
+        return ResourceImmutFieldError(
+            "Cannot modify immutable field {ctx[field_name]!r}\n\n{ctx[diff]!r}",
+            ResourceImmutFieldError.Context(
+                resource=payload, field_name=field_name, diff=diff
+            ),
+        )
 
     async def apply(self, payload: P) -> ApplyResult:
         snapshot = await self.build_snapshot(payload)
-
         is_create = snapshot is None
 
         if not is_create and (diff := self.diff(payload, snapshot)):
             logger.debug("[%s] diff: %r", self.__class__.__name__, diff)
-            is_update = bool(diff)
+            is_update = True
+
+            if immut_field_errors := tuple(
+                self._create_immut_field_error(diff, payload, immut_field)
+                for immut_field in filter(
+                    lambda loc: next(
+                        (
+                            True
+                            for pat in self.immutable_field_pats
+                            if fnmatch(loc, pat)
+                        ),
+                        False,
+                    ),
+                    (v for inner in diff.values() for v in inner.keys()),
+                )
+            ):
+                return ApplyResult(
+                    status="update_error",
+                    error=ExceptionGroup("Failed to update issuer", immut_field_errors),
+                )
         else:
             is_update = False
 
@@ -73,7 +115,7 @@ class ResourceApplyMixin(Generic[P, S]):
             await self.update_or_create_executor(payload)
         except Exception as exc:
             return ApplyResult(
-                status="create_error" if is_create else "update_error", errors=(exc,)
+                status="create_error" if is_create else "update_error", error=exc
             )
 
         if is_create:
@@ -94,14 +136,13 @@ class VersionedSecretApplyMixin(Generic[T]):
                 (kv_metadata.data["custom_metadata"] or {}).get(self.SNAPSHOT_LABEL, "")
             )
         ):
-            raise SecretIntegrityError(
-                "Manifest object not found in secret metadata, secret integrity "
-                "compromised.",
-                ctx=SecretIntegrityError.Context(resource=payload),
+            raise ResourceIntegrityError(
+                "Snapshot not found, resource integrity compromised.",
+                ctx=ResourceIntegrityError.Context(resource=payload),
             )
 
         return DeepDiff(
-            type(payload)(**camelize(json.loads(snapshot) or {})),
+            type(payload).model_construct(**camelize(json.loads(snapshot) or {})),
             payload,
             ignore_order=True,
             verbose_level=2,
@@ -147,7 +188,7 @@ class VersionedSecretApplyMixin(Generic[T]):
                         ctx,
                     )
 
-                return ApplyResult(status="verify_error", errors=(exc,))
+                return ApplyResult(status="verify_error", error=exc)
 
             if diff := await self.diff(
                 payload,
@@ -165,7 +206,7 @@ class VersionedSecretApplyMixin(Generic[T]):
             return ApplyResult(status="verify_success")
 
         except Exception as ex:
-            return ApplyResult(status="create_error", errors=(ex,))
+            return ApplyResult(status="create_error", error=ex)
 
         return (
             ApplyResult(status="create_success")

@@ -4,14 +4,16 @@ from typing import Any, NotRequired, TypedDict
 
 from typing_extensions import override
 
-from .dto.abstract import VersionedSecretApplyDTO
+from .dto.abstract import AbstractDTO
 
 __all__ = (
     "ApplicationError",
     "ManifestError",
     "ManifestValidationError",
     "ManifestSyntaxError",
-    "SecretIntegrityError",
+    "ResourceIntegrityError",
+    "ResourceImmutFieldError",
+    "SnapshotMismatchError",
     "SecretVersionMismatchError",
 )
 
@@ -39,8 +41,7 @@ class Location(TypedDict):
 
 
 @dataclass(slots=True)
-class ManifestError(ApplicationError):
-    pass
+class ManifestError(ApplicationError): ...
 
 
 @dataclass(slots=True)
@@ -82,16 +83,16 @@ class ManifestValidationError(ManifestError):
 
 
 @dataclass(slots=True)
-class SecretIntegrityError(ApplicationError):
-    """Raised when a secret fails integrity check."""
+class ResourceIntegrityError(ApplicationError):
+    """Raised when a resource fails integrity check."""
 
     class Context(TypedDict):
         """
         Attributes:
-            resource: The secret resource that failed the integrity check.
+            resource: The resource that failed the integrity check.
         """
 
-        resource: VersionedSecretApplyDTO
+        resource: AbstractDTO
 
     ctx: Context
 
@@ -104,19 +105,35 @@ class SecretIntegrityError(ApplicationError):
 
 
 @dataclass(slots=True)
-class SnapshotMismatchError(SecretIntegrityError):
+class ResourceImmutFieldError(ResourceIntegrityError):
     """
-    Raised when the snapshot of a secret does not match the expected structure.
+    Raised when an attempt is made to modify an immutable field in a resource.
+
+    This error indicates that a field in a resource is marked as immutable, but an
+    attempt was made to change its value.
+    """
+
+    class Context(ResourceIntegrityError.Context):
+        field_name: str
+        diff: dict[str, Any]
+
+    ctx: Context
+
+
+@dataclass(slots=True)
+class SnapshotMismatchError(ResourceIntegrityError):
+    """
+    Raised when the snapshot of a resource does not match the expected structure.
 
     This error usually occurs when you modify some fields of the manifest object but
     forget to bump the version field.
     """
 
-    class Context(SecretIntegrityError.Context):
+    class Context(ResourceIntegrityError.Context):
         """
         Attributes:
             diff: A dictionary describing the structural differences between the
-                expected and actual secret structures.
+                expected and actual resource structures.
         """
 
         diff: dict[str, Any]
@@ -125,7 +142,7 @@ class SnapshotMismatchError(SecretIntegrityError):
 
 
 @dataclass(slots=True)
-class SecretVersionMismatchError(SecretIntegrityError):
+class SecretVersionMismatchError(ResourceIntegrityError):
     """
     Raised when the version of a secret does not match the expected version.
 

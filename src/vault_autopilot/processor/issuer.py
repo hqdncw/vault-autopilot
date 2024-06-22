@@ -105,21 +105,41 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
     async def _flush(self, node: NodeType) -> None:
         assert isinstance(node, IssuerNode), node
 
-        await self.observer.trigger(event.IssuerApplicationInitiated(node.payload))
+        payload = node.payload
+
+        await self.observer.trigger(event.IssuerApplicationInitiated(payload))
+
+        result = {}
 
         try:
-            result = await self.iss_svc.apply(node.payload)
-        except Exception as ex:
-            result = ApplyResult(status="verify_error", errors=(ex,))
+            result = await self.iss_svc.apply(payload)
+        except Exception as exc:
+            ev, result = (
+                event.IssuerCreateError(payload),
+                ApplyResult(status="create_error", error=exc),
+            )
+        else:
+            match result.get("status"):
+                case "verify_success":
+                    ev = event.IssuerVerifySuccess(payload)
+                case "verify_error":
+                    ev = event.IssuerVerifyError(payload)
+                case "update_success":
+                    ev = event.IssuerUpdateSuccess(payload)
+                case "update_error":
+                    ev = event.IssuerUpdateError(payload)
+                case "create_success":
+                    ev = event.IssuerCreateSuccess(payload)
+                case "create_error":
+                    ev = event.IssuerCreateError(payload)
+                case _ as status:
+                    raise NotImplementedError(status)
+        finally:
+            logger.debug("applying finished %r", payload.absolute_path())
+            await self.observer.trigger(ev)
 
-        await self.observer.trigger(
-            STATUS_EVENT_MAPPING[result["status"]](node.payload)
-        )
-
-        if errors := result.get("errors"):
-            raise ExceptionGroup("Failed to apply issuer", errors)
-
-        logger.debug("applying finished %r", node.payload.absolute_path())
+        if error := result.get("error"):
+            raise error
 
     @override
     def initialize(self) -> None:
