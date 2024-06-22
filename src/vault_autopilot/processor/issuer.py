@@ -8,7 +8,7 @@ from typing_extensions import override
 from .. import dto
 from ..dispatcher import event
 from ..service import IssuerService
-from ..service.abstract import ApplyResult, ApplyResultStatus
+from ..service.abstract import ApplyResult
 from ..util.dependency_chain import AbstractNode, FallbackNode
 from .abstract import (
     ChainBasedProcessor,
@@ -16,18 +16,6 @@ from .abstract import (
 )
 
 logger = logging.getLogger(__name__)
-
-STATUS_EVENT_MAPPING: dict[
-    ApplyResultStatus,
-    type[event.IssuerApplySuccess | event.IssuerApplyError],
-] = {
-    "verify_success": event.IssuerVerifySuccess,
-    "create_success": event.IssuerCreateSuccess,
-    "update_success": event.IssuerUpdateSuccess,
-    "verify_error": event.IssuerVerifyError,
-    "create_error": event.IssuerCreateError,
-    "update_error": event.IssuerUpdateError,
-}
 
 
 @dataclass(slots=True)
