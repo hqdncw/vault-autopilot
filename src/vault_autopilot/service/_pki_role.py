@@ -28,7 +28,7 @@ class PKIRoleService(ResourceApplyMixin[dto.PKIRoleApplyDTO, Snapshot]):
                     **camelize(
                         dict(
                             **model_dump(
-                                payload.spec, include=("secrets_engine", "name")
+                                payload.spec, include=("secrets_engine_path", "name")
                             ),
                             role=recursive_dict_filter(snapshot, payload.spec["role"]),
                         )
@@ -42,7 +42,7 @@ class PKIRoleService(ResourceApplyMixin[dto.PKIRoleApplyDTO, Snapshot]):
 
     async def build_snapshot(self, payload: dto.PKIRoleApplyDTO) -> Snapshot | None:
         result = await self.client.read_pki_role(
-            name=payload.spec["name"], mount_path=payload.spec["secrets_engine"]
+            name=payload.spec["name"], mount_path=payload.spec["secrets_engine_path"]
         )
         return result.data if result is not None else None
 
@@ -50,6 +50,6 @@ class PKIRoleService(ResourceApplyMixin[dto.PKIRoleApplyDTO, Snapshot]):
     def update_or_create_executor(self):
         return lambda payload: self.client.update_or_create_pki_role(
             name=payload.spec["name"],
-            mount_path=payload.spec["secrets_engine"],
+            mount_path=payload.spec["secrets_engine_path"],
             **model_dump(payload.spec["role"]),
         )

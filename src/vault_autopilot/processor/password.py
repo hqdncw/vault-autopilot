@@ -71,7 +71,7 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
         return (
             PasswordPolicyFallbackNode.from_path(node.payload.spec["policy_path"]),
             SecretsEngineFallbackNode.from_absolute_path(
-                node.payload.spec["secrets_engine"]
+                node.payload.spec["secrets_engine_path"]
             ),
         )
 

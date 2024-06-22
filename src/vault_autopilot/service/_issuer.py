@@ -41,7 +41,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
 
     async def _create_intmd_issuer(self, payload: dto.IssuerApplyDTO) -> None:
         mount_path, certificate, chaining = (
-            payload.spec["secrets_engine"],
+            payload.spec["secrets_engine_path"],
             payload.spec["certificate"],
             payload.spec.get("chaining"),
         )
@@ -79,7 +79,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
         _ = await self.client.update_issuer(
             issuer_ref=imported_issuers[0],
             issuer_name=payload.spec["name"],
-            mount_path=payload.spec["secrets_engine"],
+            mount_path=payload.spec["secrets_engine_path"],
             **payload.spec.get("options", {}),
         )
 
@@ -88,13 +88,13 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
 
         _ = await self.client.generate_root(
             issuer_name=spec["name"],
-            mount_path=spec["secrets_engine"],
+            mount_path=spec["secrets_engine_path"],
             **spec["certificate"],
         )
 
         if options := spec.get("options"):
             _ = await self.client.update_issuer(
-                mount_path=spec["secrets_engine"],
+                mount_path=spec["secrets_engine_path"],
                 issuer_ref=spec["name"],
                 **options,
             )
@@ -112,7 +112,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
 
     async def update(self, payload: dto.IssuerApplyDTO) -> None:
         await self.client.update_issuer(
-            mount_path=payload.spec["secrets_engine"],
+            mount_path=payload.spec["secrets_engine_path"],
             issuer_ref=payload.spec["name"],
             **payload.spec.get("options", {}),
         )
@@ -131,7 +131,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
                 is_exists = bool(
                     await self.get(
                         issuer_ref=payload.spec["name"],
-                        mount_path=payload.spec["secrets_engine"],
+                        mount_path=payload.spec["secrets_engine_path"],
                     )
                 )
 
@@ -148,7 +148,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
             await self.repo.get(payload.absolute_path()),
             await self.get(
                 issuer_ref=payload.spec["name"],
-                mount_path=payload.spec["secrets_engine"],
+                mount_path=payload.spec["secrets_engine_path"],
             ),
         )
         snapshot_is_missing = snapshot is None

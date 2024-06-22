@@ -27,7 +27,7 @@ class Chaining(TypedDict):
 class IssuerApplyDTO(AbstractDTO):
     class Spec(TypedDict):
         name: str
-        secrets_engine: str
+        secrets_engine_path: str
         certificate: Certificate
         options: Options
         chaining: NotRequired[Chaining]
@@ -37,7 +37,7 @@ class IssuerApplyDTO(AbstractDTO):
     spec: Spec
 
     def absolute_path(self) -> str:
-        return "/".join((self.spec["secrets_engine"], self.spec["name"]))
+        return "/".join((self.spec["secrets_engine_path"], self.spec["name"]))
 
     def upstream_issuer_absolute_path(self) -> str:
         assert "chaining" in self.spec, "Chaining field is required"

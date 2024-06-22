@@ -97,7 +97,7 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
 
         return (
             SecretsEngineFallbackNode.from_absolute_path(
-                node.payload.spec["secrets_engine"]
+                node.payload.spec["secrets_engine_path"]
             ),
         )
 

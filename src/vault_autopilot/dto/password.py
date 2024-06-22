@@ -12,4 +12,4 @@ class PasswordApplyDTO(VersionedSecretApplyDTO):
     spec: Spec
 
     def absolute_path(self) -> str:
-        return "/".join((self.spec["secrets_engine"], self.spec["path"]))
+        return "/".join((self.spec["secrets_engine_path"], self.spec["path"]))

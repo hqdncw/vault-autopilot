@@ -9,14 +9,16 @@ from .abstract import AbstractDTO
 class PKIRoleApplyDTO(AbstractDTO):
     class Spec(TypedDict):
         name: str
-        secrets_engine: str
+        secrets_engine_path: str
         role: pki_role.PKIRoleFields
 
     kind: Literal["PKIRole"] = "PKIRole"
     spec: Spec
 
     def absolute_path(self) -> str:
-        return "/".join((self.spec["secrets_engine"], self.spec["name"]))
+        return "/".join((self.spec["secrets_engine_path"], self.spec["name"]))
 
     def issuer_ref_absolute_path(self) -> str:
-        return "/".join((self.spec["secrets_engine"], self.spec["role"]["issuer_ref"]))
+        return "/".join(
+            (self.spec["secrets_engine_path"], self.spec["role"]["issuer_ref"])
+        )

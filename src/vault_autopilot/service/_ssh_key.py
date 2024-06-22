@@ -69,10 +69,10 @@ class SSHKeyService(abstract.VersionedSecretApplyMixin[dto.SSHKeyApplyDTO]):
                 ),
             },
             cas=spec["version"] - 1,
-            mount_path=spec["secrets_engine"],
+            mount_path=spec["secrets_engine_path"],
         )
         _ = await self.client.update_or_create_metadata(
-            mount_path=spec["secrets_engine"],
+            mount_path=spec["secrets_engine_path"],
             path=spec["path"],
             custom_metadata={self.SNAPSHOT_LABEL: model_dump_json(payload)},
         )
