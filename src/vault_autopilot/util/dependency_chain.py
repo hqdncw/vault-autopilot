@@ -6,7 +6,6 @@ from typing import (
     Generic,
     Literal,
     NoReturn,
-    TypedDict,
     TypeVar,
 )
 
@@ -75,10 +74,6 @@ class FallbackNode(AbstractNode):
     @override
     def __hash__(self) -> int:
         return self.node_hash
-
-
-class _EdgeAttrs(TypedDict):
-    status: DependencyStatus
 
 
 @dataclass(slots=True)
@@ -184,9 +179,9 @@ class DependencyChain(Generic[T]):
         return id(
             next(
                 filter(
-                    lambda edge: False
-                    if exclude(edge[0])
-                    else self.get_node_status_by_hash(edge[0]) != "satisfied",
+                    lambda edge: False  # type: ignore[arg-type]
+                    if exclude(edge[0])  # type: ignore[index]
+                    else self.get_node_status_by_hash(edge[0]) != "satisfied",  # type: ignore[index]
                     self._graph.in_edges(hash(node)),
                 ),
                 default_obj,
