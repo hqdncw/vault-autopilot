@@ -7,26 +7,13 @@ from typing_extensions import override
 from .. import dto, util
 from ..dispatcher import event
 from ..service import PasswordService
-from ..service.abstract import ApplyResult, ApplyResultStatus
+from ..service.abstract import ApplyResult
 from .abstract import (
     ChainBasedProcessor,
     SecretsEngineFallbackNode,
 )
 
 logger = logging.getLogger(__name__)
-
-
-APPLY_STATUS_EVENT_MAP: dict[
-    ApplyResultStatus,
-    type[event.PasswordApplySuccess | event.PasswordApplyError],
-] = {
-    "verify_success": event.PasswordVerifySuccess,
-    "create_success": event.PasswordCreateSuccess,
-    "update_success": event.PasswordUpdateSuccess,
-    "verify_error": event.PasswordVerifyError,
-    "create_error": event.PasswordCreateError,
-    "update_error": event.PasswordUpdateError,
-}
 
 
 @dataclass(slots=True)
@@ -126,6 +113,8 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
         payload = node.payload
 
         await self.observer.trigger(event.PasswordApplicationInitiated(payload))
+
+        ev: event.PasswordApplySuccess | event.PasswordApplyError
 
         try:
             result = await self.pwd_svc.apply(payload)
