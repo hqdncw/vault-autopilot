@@ -41,8 +41,8 @@ class PasswordPolicyApplyProcessor(AbstractProcessor[event.EventType]):
             result = await self.pwd_policy_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.PasswordPolicyCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.PasswordPolicyVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):

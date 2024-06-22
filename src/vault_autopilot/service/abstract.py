@@ -142,8 +142,8 @@ class VersionedSecretApplyMixin(Generic[T]):
             )
 
         return DeepDiff(
-            type(payload).model_construct(**camelize(json.loads(snapshot) or {})),
-            payload,
+            json.loads(snapshot) or {},
+            camelize(payload.__dict__),
             ignore_order=True,
             verbose_level=2,
         )
@@ -198,8 +198,8 @@ class VersionedSecretApplyMixin(Generic[T]):
                 ),
             ):
                 raise SnapshotMismatchError(
-                    "The secret data has been modified unexpectedly. Please review and "
-                    "update the secret accordingly.\n\n{ctx[diff]!r}",
+                    "Snapshot mismatch. Resource state differs. Bump version or roll "
+                    "back changes to sync.\n\n{ctx[diff]!r}",
                     ctx=SnapshotMismatchError.Context(resource=payload, diff=diff),
                 )
 

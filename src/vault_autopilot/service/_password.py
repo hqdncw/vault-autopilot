@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from humps import camelize
 from typing_extensions import override
 
 from vault_autopilot.util.model import model_dump_json
@@ -46,5 +47,7 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
         _ = await self.client.update_or_create_metadata(
             mount_path=spec["secrets_engine_path"],
             path=spec["path"],
-            custom_metadata={self.SNAPSHOT_LABEL: model_dump_json(payload)},
+            custom_metadata={
+                self.SNAPSHOT_LABEL: model_dump_json(camelize(payload.__dict__))
+            },
         )

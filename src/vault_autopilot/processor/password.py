@@ -120,8 +120,8 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
             result = await self.pwd_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.PasswordCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.PasswordVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):

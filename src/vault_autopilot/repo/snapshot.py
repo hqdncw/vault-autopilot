@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Generic
 
+from humps import camelize
 from typing_extensions import TypeVar
 
 from ..dto.abstract import AbstractDTO
@@ -21,4 +22,4 @@ class SnapshotRepo(Generic[T]):
         )
 
     async def put(self, path: str, payload: T) -> None:
-        self.storage.update({path: payload})
+        self.storage.update({path: camelize(payload.__dict__)})

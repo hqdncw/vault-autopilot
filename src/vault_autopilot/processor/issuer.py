@@ -115,8 +115,8 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
             result = await self.iss_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.IssuerCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.IssuerVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):

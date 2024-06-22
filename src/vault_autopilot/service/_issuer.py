@@ -4,6 +4,7 @@ from typing import Any, Callable, ClassVar, Coroutine
 
 from cryptography.utils import cached_property
 from deepdiff import DeepDiff
+from humps import camelize
 from typing_extensions import Unpack
 
 from vault_autopilot._pkg.asyva.exc import IssuerNotFoundError
@@ -36,7 +37,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
     client: asyva.Client
     repo: SnapshotRepo[IssuerSnapshot]
     immutable_field_pats: ClassVar[tuple[str, ...]] = (
-        "root.spec[[]'certificate'[]]**",
+        "root[[]'spec'[]][[]'certificate'[]]**",
     )
 
     async def _create_intmd_issuer(self, payload: dto.IssuerApplyDTO) -> None:
@@ -80,7 +81,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
             issuer_ref=imported_issuers[0],
             issuer_name=payload.spec["name"],
             mount_path=payload.spec["secrets_engine_path"],
-            **payload.spec.get("options", {}),
+            **payload.spec.get("options", {}),  # type: ignore[reportArgumentType]
         )
 
     async def _create_root_issuer(self, payload: dto.IssuerApplyDTO) -> None:
@@ -114,7 +115,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
         await self.client.update_issuer(
             mount_path=payload.spec["secrets_engine_path"],
             issuer_ref=payload.spec["name"],
-            **payload.spec.get("options", {}),
+            **payload.spec.get("options", {}),  # type: ignore[reportArgumentTypie]
         )
 
     async def get(self, **payload: Unpack[dto.IssuerGetDTO]) -> IssuerReadResult | None:
@@ -176,7 +177,7 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
             ),
             payload.spec.get("options", {}),
         ):
-            snapshot.spec.update(options=options)  # type: ignore[reportArgumentType]
+            snapshot.spec.update(options=camelize(options))  # type: ignore[reportArgumentType]
 
         return snapshot
 
@@ -184,8 +185,8 @@ class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
         self, payload: dto.IssuerApplyDTO, snapshot: IssuerSnapshot
     ) -> dict[str, Any]:
         return DeepDiff(
-            snapshot,
-            payload,
+            snapshot.__dict__,
+            camelize(payload.__dict__),
             ignore_order=True,
             verbose_level=2,
         )

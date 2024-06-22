@@ -97,8 +97,8 @@ class PKIRoleApplyProcessor(
             result = await self.pki_role_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.PKIRoleCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.PKIRoleVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):

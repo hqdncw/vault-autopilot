@@ -98,8 +98,8 @@ class SSHKeyApplyProcessor(
             result = await self.ssh_key_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.SSHKeyCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.SSHKeyVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):

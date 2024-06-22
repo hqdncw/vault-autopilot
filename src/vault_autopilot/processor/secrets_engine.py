@@ -38,8 +38,8 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
             result = await self.secrets_engine_svc.apply(payload)
         except Exception as exc:
             ev, result = (
-                event.SecretsEngineCreateError(payload),
-                ApplyResult(status="create_error", error=exc),
+                event.SecretsEngineVerifyError(payload),
+                ApplyResult(status="verify_error", error=exc),
             )
         else:
             match result.get("status"):
