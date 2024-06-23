@@ -70,10 +70,6 @@ class ManifestParser(Generic[T]):
         print(await parser.queue.get())
     """
 
-    # TODO: Implement a file-based queue modeled after
-    #  tempfile.SpooledTemporaryFile to efficiently manage large datasets while
-    #  avoiding memory overflow.
-
     manifest_iterator: Iterator[IO[bytes]]
     object_builder: type[T]
     queue: asyncio.Queue[T | None]
