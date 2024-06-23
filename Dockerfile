@@ -4,8 +4,6 @@ ARG PYTHON_VERSION="3.11.2-slim"
 
 FROM python:$PYTHON_VERSION AS build
 
-RUN rm -f /etc/apt/apt.conf.d/docker-clean
-
 RUN --mount=type=cache,target=/var/cache/apt \
   rm -f /etc/apt/apt.conf.d/docker-clean && \
 	apt-get update && \
