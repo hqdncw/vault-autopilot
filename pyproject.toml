@@ -132,8 +132,6 @@ ignore_missing_imports = true
 
 [tool.pyright]
 typeCheckingMode = "basic"
-venvPath = "."
-venv = ".venv"
 
 [tool.semantic_release]
 build_command = """
