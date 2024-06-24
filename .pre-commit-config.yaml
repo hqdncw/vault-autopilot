@@ -45,3 +45,9 @@ repos:
     rev: v1.12.5
     hooks:
       - id: basedpyright
+        additional_dependencies:
+          - "click~=8.1.7"
+          - "pydantic~=2.7.1"
+          - "ruamel.yaml~=0.18.5"
+          - "lazy-object-proxy~=1.9.0"
+          - "pydantic-settings~=2.3.3"

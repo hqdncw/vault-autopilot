@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/usr/bin/env bash
 
 # This script is designed to activate a Python virtual environment for running
 # the Vault Autopilot CLI. It's especially handy for developers who want to
