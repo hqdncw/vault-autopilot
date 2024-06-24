@@ -2,7 +2,7 @@
 Commands
 ########
 
-.. _target commands:
+.. _target config_flag:
 .. click:: vault_autopilot.__main__:cli
    :prog: vault-autopilot
 

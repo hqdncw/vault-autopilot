@@ -7,14 +7,14 @@ resources with ease and precision. This guide will walk you through the process
 of getting started with Vault Autopilot CLI, from setting up your Vault server
 to applying your first manifest.
 
+
 Prerequisites
 =============
 
-Before you dive in, make sure you've got the following covered:
+Before you start, make sure you have Docker installed to run the Vault
+Autopilot CLI in a container (or check our :ref:`Installation` page for
+alternative options).
 
-- **Docker**: You'll need Docker to run the Vault Autopilot CLI in a container.
-  (If you prefer not to use Docker, you can find alternative installation
-  options on our :ref:`Installation<target installation>` page.)
 
 Starting a Vault Server Instance
 ================================
@@ -29,10 +29,6 @@ running the following command:
    -e VAULT_DEV_LISTEN_ADDRESS="0.0.0.0:8200" \
    --network host \
    hashicorp/vault server -dev
-
-This will start a development-mode Vault server, which is suitable for testing
-and evaluation purposes. For production environments, you'll need to configure
-and launch your Vault server according to your specific requirements.
 
 Output:
 
@@ -122,35 +118,55 @@ Output:
 
       Development mode should NOT be used in production installations!
 
-Defining an Autopilot Config File
-=================================
 
-Create a new file called ``config.yaml`` with the following content:
+Creating a Bash Alias
+=====================
 
-Filename: ``config.yaml``
+Instead of installing the Vault Autopilot CLI locally, you can use a Docker
+container to get started quickly. Here's an example bash alias that runs the
+Vault Autopilot CLI within a Docker container, with some initial configuration:
 
-.. code:: yaml
+.. prompt:: bash
 
-  baseUrl: "http://localhost:8200"
-  auth:
-    method: token
-    token: insecure-dev-only-token
+  alias vault-autopilot=' \
+  docker run --rm --network host \
+  -e BASEURL="http://localhost:8200" \
+  -e AUTH__METHOD="token" \
+  -e AUTH__TOKEN="insecure-dev-only-token" \
+  -e STORAGE__TYPE="kvv1-secret" \
+  hqdncw/vault-autopilot:latest' "$@"
 
-This file defines the configuration for Vault Autopilot CLI, including the base
-URL of your Vault server and the authentication method.
+It uses token-based authentication with a default token
+``insecure-dev-only-token`` and stores data in the ``kvv1-secret`` storage
+type. You can always override these values as needed.
 
 .. note::
 
-   For a comprehensive list of all available configuration keys, please refer to
-   the :ref:`Configuration <target configuration>` page.
+  For a comprehensive list of all available environment variables, please refer
+  to the :ref:`Configuration` page.
+
+
+Verify the Alias Setup
+======================
+
+Before moving forward, make sure your alias is set up correctly by running the
+``--help`` command. This will ensure that the Vault Autopilot CLI is
+functioning as expected.
+
+.. prompt:: bash
+
+  vault-autopilot --help
+
+If everything is set up correctly, you should see the help menu with
+information on available commands, options, and flags. If you encounter any
+issues, double-check your alias setup and try again.
+
 
 Defining a Manifest File
 ========================
 
 A manifest is a YAML file that defines the desired state of your Vault
 resources. Create a new file called ``manifest.yaml`` with the following content:
-
-Filename: ``manifest.yaml``
 
 .. code:: yaml
 
@@ -189,6 +205,7 @@ Filename: ``manifest.yaml``
     secretKey: foo
     version: 1
 
+
 Applying the Manifest to Your Vault Server
 ==========================================
 
@@ -196,9 +213,7 @@ To apply the manifest to your Vault server, run the following command:
 
 .. prompt:: bash
 
-   docker run --rm --network host \
-   -v $PWD:/srv/vault-autopilot hqdncw/vault-autopilot \
-   -c config.yaml apply -f manifest.yaml
+   vault-autopilot apply < manifest.yaml
 
 Output:
 
@@ -214,6 +229,7 @@ Vault Autopilot CLI will parse the manifest and apply the necessary changes to
 your Vault server.
 
 .. TODO: You can verify the changes by running vault-autopilot status.
+
 
 Inspecting the Vault State
 ==========================
@@ -257,7 +273,7 @@ Output:
    Key                Value
    ---                -----
    created_time       2024-06-17T10:41:19.822630332Z
-   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secretsEngine_path":"kv","path":"hello","encoding":"utf8","version":1,"secretKey":"foo","policyPath":"example"},"kind":"Password"}]
+   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secretsEnginePath":"kv","path":"hello","encoding":"utf8","version":1,"secretKey":"foo","policyPath":"example"},"kind":"Password"}]
    deletion_time      n/a
    destroyed          false
    version            1
@@ -289,6 +305,7 @@ Output:
 
 This will display a summary of the current state of your Vault resources,
 including the secret and password policy defined in your manifest.
+
 
 Managing Configuration Updates
 ==============================
@@ -325,9 +342,7 @@ again to apply the changes to your Vault server:
 
 .. code:: bash
 
-  $ docker run --rm --network host \
-  -v $PWD:/srv/vault-autopilot hqdncw/vault-autopilot \
-  apply -c config.yaml apply -f manifest.yaml
+  $ vault-autopilot apply < manifest.yaml
   [+] Applying manifests (0.0251 seconds) FINISHED
    => Verifying integrity of Password 'kv/hello'... done
    => Updating PasswordPolicy 'example'... done
@@ -355,6 +370,7 @@ Vault Autopilot will update the password policy on your Vault server to reflect 
        version: 2
 
   That's it!
+
 
 Conclusion
 ==========

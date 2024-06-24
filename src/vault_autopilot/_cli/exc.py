@@ -47,14 +47,6 @@ class ConfigSyntaxError(ConfigError):
 
 @dataclass(slots=True, kw_only=True)
 class ConfigValidationError(ConfigError):
-    class Context(TypedDict):
-        loc: Location
-
-    ctx: Context
-
     @override
     def format_message(self) -> str:
-        return "Validation failed for configuration file %r.\n\n%s" % (
-            str(self.ctx["loc"]["filename"]),
-            self.message,
-        )
+        return "Invalid configuration input.\n\n%s" % self.message

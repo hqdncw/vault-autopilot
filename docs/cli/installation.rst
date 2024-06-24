@@ -1,5 +1,3 @@
-.. _target installation:
-
 ############
 Installation
 ############
@@ -13,29 +11,22 @@ Installing with pip
 If you have Python >= 3.11 and pip installed on your system, you can install
 Vault Autopilot CLI using the following command:
 
-.. tab:: Linux
+.. prompt:: bash
 
-  .. prompt:: bash
-
-    python3 -m pip install vault-autopilot[cli] && \
-    vault-autopilot --help
-
-.. tab:: MacOS
-
-  .. prompt:: bash
-
-    python3 -m pip install vault-autopilot[cli] && \
-    vault-autopilot --help
-
-.. tab:: Windows
-
-  .. prompt:: powershell
-
-    py -m pip install vault-autopilot[cli]
-    py -m vault_autopilot --help
+  pip install --user vault-autopilot[cli] && \
+  vault-autopilot --help
 
 This will install the latest stable version of Vault Autopilot CLI and its
 dependencies.
+
+.. warning::
+
+  The ``--user`` is important, that ensures you install it in your user's
+  directory and not in the global system.
+
+  If you installed it in the global system (e.g. with sudo) you could install a
+  version of a library (e.g. a sub-dependency) that is incompatible with your
+  system.
 
 Installing with Docker
 ======================

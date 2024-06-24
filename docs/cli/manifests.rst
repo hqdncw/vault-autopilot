@@ -43,7 +43,7 @@ Available keys
 
 .. warning::
 
-   Currently, only Secrets Engines of type ``kv-v2`` or ``pki`` are supported.
+   Currently, only secrets engines of type ``kv-v2`` or ``pki`` are supported.
    Support for other engine types may be added in future releases.
 
 .. container:: toggle, toggle-hidden
@@ -75,7 +75,7 @@ Creating a root Issuer
    kind: Issuer
    spec:
      name: root-2024
-     secretsEngine: pki
+     secretsEnginePath: pki
      certificate:
        type: internal
        commonName: "example.com Root Authority"
@@ -90,7 +90,7 @@ Creating an intermediate Issuer
    kind: Issuer
    spec:
      name: intmd-2024
-     secretsEngine: pki_int
+     secretsEnginePath: pki_int
      certificate:
        type: internal
        commonName: "example.com Intermediate Authority"
@@ -128,7 +128,7 @@ Creating a PKI Role
    kind: PKIRole
    spec:
      name: example
-     secretsEngine: pki
+     secretsEnginePath: pki
      role:
        issuerRef: root-2024
        allowedDomains: "example.com"
@@ -167,7 +167,7 @@ Here's an example of how to create an SSH Key:
 
    kind: SSHKey
    spec:
-     secretsEngine: kv
+     secretsEnginePath: kv
      path: id_rsa
      keyOptions:
        type: rsa
@@ -256,7 +256,7 @@ Creating a Password
    kind: Password
    spec:
      path: my-secret
-     secretsEngine: kv
+     secretsEnginePath: kv
      policyPath: example
      secretKey: foo
      version: 1
@@ -273,7 +273,7 @@ Creating a Password
      kind: Password
      spec:
        path: my-secret
-       secretsEngine: kv
+       secretsEnginePath: kv
        policyPath: example
        secretKey: foo
        # bump the version from 1 to 2 to trigger a new password generation

@@ -1,15 +1,18 @@
 from typing import Annotated, Literal
 
-import pydantic.alias_generators
-from pydantic import Field
+from pydantic import ConfigDict, Field
+from pydantic.alias_generators import to_camel
 from pydantic.dataclasses import dataclass
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 from typing_extensions import TypedDict
 
 from ._pkg import asyva
 
-_config = pydantic.ConfigDict(
-    alias_generator=pydantic.alias_generators.to_camel, extra="forbid"
-)
+_config = ConfigDict(alias_generator=to_camel, extra="forbid")
 
 
 @dataclass(slots=True, config=_config, kw_only=True)
@@ -30,11 +33,26 @@ class VaultSecretStorage(TypedDict):
     snapshots_secret_path: Annotated[str, Field(default="snapshots")]
 
 
-@dataclass(slots=True, config=_config)
-class Settings:
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        alias_generator=to_camel,
+        extra="forbid",
+        validate_default=False,
+        env_nested_delimiter="__",
+    )
+
     base_url: str
     storage: VaultSecretStorage
-    auth: KubernetesAuthMethod | TokenAuthMethod = pydantic.Field(
-        discriminator="method"
-    )
+    auth: KubernetesAuthMethod | TokenAuthMethod = Field(discriminator="method")
     default_namespace: str = ""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        _: type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> tuple[PydanticBaseSettingsSource, ...]:
+        return env_settings, file_secret_settings, init_settings
