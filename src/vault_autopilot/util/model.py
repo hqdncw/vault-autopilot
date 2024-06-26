@@ -63,6 +63,7 @@ def convert_errors(
                 "SecretsEngine",
                 "PKIRole",
                 "Issuer",
+                "SSHKey",
             ):
                 error["loc"] = error["loc"][1:]
 

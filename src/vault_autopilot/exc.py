@@ -150,3 +150,24 @@ class SecretVersionMismatchError(ResourceIntegrityError):
     the version of the secret stored in the system. This can happen if the secret
     has been updated since the last time the manifest was applied.
     """
+
+
+@dataclass(slots=True)
+class UnresolvedDependencyError(ApplicationError):
+    """
+    Raised when a resource reference a depepndency that is not defined in any of the
+    provided manifests.
+    """
+
+    class Context(ApplicationError.Context):
+        """
+        Attributes:
+            resource_ref: The absolute path of the resource that has an unresolved
+                dependency.
+            dependency_ref: The absolute path of the dependency that has not been
+                defined.
+        """
+
+        resource_ref: str
+        dependency_ref: str
+        # TODO: loc: Location

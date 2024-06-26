@@ -6,10 +6,11 @@ from typing_extensions import override
 
 from vault_autopilot.service.abstract import ApplyResult
 
-from .. import dto, util
+from .. import dto
 from ..dispatcher import event
 from ..service import SSHKeyService
 from .abstract import (
+    AbstractNode,
     ChainBasedProcessor,
     SecretsEngineFallbackNode,
 )
@@ -18,16 +19,16 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class SSHKeyNode(util.dependency_chain.AbstractNode):
+class SSHKeyNode(AbstractNode):
     payload: dto.SSHKeyApplyDTO
 
     @override
     def __hash__(self) -> int:
-        return hash(self.payload.absolute_path())
+        return hash(self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.SSHKeyApplyDTO) -> "SSHKeyNode":
-        return cls(payload)
+        return cls(payload.absolute_path(), payload)
 
 
 NodeType = SSHKeyNode | SecretsEngineFallbackNode
@@ -118,8 +119,10 @@ class SSHKeyApplyProcessor(
                 case _ as status:
                     raise NotImplementedError(status)
         finally:
-            logger.debug("applying finished %r", payload.absolute_path())
-            await self.observer.trigger(ev)
+            if "ev" in locals().keys():
+                logger.debug("applying finished %r", payload.absolute_path())
+
+                await self.observer.trigger(ev)
 
         if error := result.get("error"):
             raise error

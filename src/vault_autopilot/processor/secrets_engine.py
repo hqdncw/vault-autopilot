@@ -58,8 +58,11 @@ class SecretsEngineApplyProcessor(AbstractProcessor[event.EventType]):
                 case _ as status:
                     raise NotImplementedError(status)
         finally:
-            logger.debug("applying finished %r", payload.absolute_path())
-            await self.observer.trigger(ev)
+            # in case if the future is canceled the ev var is unbound
+            if "ev" in locals().keys():
+                logger.debug("applying finished %r", payload.absolute_path())
+
+                await self.observer.trigger(ev)
 
         if error := result.get("error"):
             raise error

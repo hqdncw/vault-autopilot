@@ -4,11 +4,13 @@ from typing import Iterable, Sequence
 
 from typing_extensions import override
 
-from .. import dto, util
+from .. import dto
 from ..dispatcher import event
 from ..service import PasswordService
 from ..service.abstract import ApplyResult
 from .abstract import (
+    AbstractFallbackNode,
+    AbstractNode,
     ChainBasedProcessor,
     SecretsEngineFallbackNode,
 )
@@ -17,29 +19,23 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class PasswordNode(util.dependency_chain.AbstractNode):
+class PasswordNode(AbstractNode):
     payload: dto.PasswordApplyDTO
 
     @override
     def __hash__(self) -> int:
-        return hash(self.payload.absolute_path())
+        return hash(self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.PasswordApplyDTO) -> "PasswordNode":
-        return cls(payload)
+        return cls(payload.absolute_path(), payload)
 
 
 @dataclass(slots=True)
-class PasswordPolicyFallbackNode(util.dependency_chain.AbstractNode):
-    node_hash: int
-
+class PasswordPolicyFallbackNode(AbstractFallbackNode):
     @override
     def __hash__(self) -> int:
         return self.node_hash
-
-    @classmethod
-    def from_path(cls, path: str) -> "PasswordPolicyFallbackNode":
-        return cls(hash(path))
 
 
 NodeType = PasswordNode | PasswordPolicyFallbackNode | SecretsEngineFallbackNode
@@ -56,7 +52,9 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
         assert isinstance(node, PasswordNode), node
 
         return (
-            PasswordPolicyFallbackNode.from_path(node.payload.spec["policy_path"]),
+            PasswordPolicyFallbackNode.from_absolute_path(
+                node.payload.spec["policy_path"]
+            ),
             SecretsEngineFallbackNode.from_absolute_path(
                 node.payload.spec["secrets_engine_path"]
             ),
@@ -98,7 +96,9 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
                 ev.resource.spec["path"]
             )
         elif isinstance(ev, event.PasswordPolicyApplySuccess):
-            return PasswordPolicyFallbackNode.from_path(ev.resource.absolute_path())
+            return PasswordPolicyFallbackNode.from_absolute_path(
+                ev.resource.absolute_path()
+            )
 
         raise RuntimeError("Unexpected upstream dependency %r", ev)
 
@@ -140,8 +140,10 @@ class PasswordApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
                 case _ as status:
                     raise NotImplementedError(status)
         finally:
-            logger.debug("applying finished %r", payload.absolute_path())
-            await self.observer.trigger(ev)
+            if "ev" in locals().keys():
+                logger.debug("applying finished %r", payload.absolute_path())
+
+                await self.observer.trigger(ev)
 
         if error := result.get("error"):
             raise error

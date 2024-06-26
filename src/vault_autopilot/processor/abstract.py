@@ -3,29 +3,39 @@ from abc import ABC, abstractmethod
 from asyncio import Semaphore, TaskGroup
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Generic, Iterable, TypeVar
+from typing import Generic, Iterable, Self, TypeVar
 
 from ironfence import Mutex
 from typing_extensions import TYPE_CHECKING, override
 
+from vault_autopilot.exc import UnresolvedDependencyError
+
 from .._pkg import asyva
 from ..util.coro import create_task_limited
+from ..util.dependency_chain import AbstractNode as Node
 from ..util.dependency_chain import DependencyChain, FallbackNode
 
 if TYPE_CHECKING:
     from ..dispatcher import event
 
-T = TypeVar("T")
+T = TypeVar("T", bound="AbstractNode | AbstractFallbackNode")
 P = TypeVar("P")
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
-class SecretsEngineFallbackNode(FallbackNode):
+class AbstractNode(Node):
+    absolute_path: str
+
+
+@dataclass(slots=True)
+class AbstractFallbackNode(FallbackNode):
+    absolute_path: str
+
     @classmethod
-    def from_absolute_path(cls, path: str) -> "SecretsEngineFallbackNode":
-        return cls(node_hash=hash(path))
+    def from_absolute_path(cls, path: str) -> Self:
+        return cls(node_hash=hash(path), absolute_path=path)
 
     @override
     def __hash__(self) -> int:
@@ -33,9 +43,16 @@ class SecretsEngineFallbackNode(FallbackNode):
 
 
 @dataclass(slots=True)
-class AbstractProcessor(ABC, Generic[T]):
+class SecretsEngineFallbackNode(AbstractFallbackNode):
+    @override
+    def __hash__(self) -> int:
+        return self.node_hash
+
+
+@dataclass(slots=True)
+class AbstractProcessor(ABC, Generic[P]):
     client: asyva.Client
-    observer: "event.EventObserver[T]"
+    observer: "event.EventObserver[P]"
     sem: Semaphore
 
     @abstractmethod
@@ -45,6 +62,7 @@ class AbstractProcessor(ABC, Generic[T]):
 @dataclass(slots=True)
 class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
     dep_chain: Mutex[DependencyChain[T]]
+    shutdown_event: type[P]
 
     @abstractmethod
     async def _build_fallback_upstream_nodes(self, node: T) -> Iterable[T]:
@@ -116,6 +134,7 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
             self.upstream_dependency_triggers,
             _on_trigger,
         )
+        self.observer.register((self.shutdown_event,), self._on_shutdown_requested)
 
     async def schedule(self, node: T) -> None:
         """
@@ -211,3 +230,28 @@ class ChainBasedProcessor(AbstractProcessor[P], Generic[T, P]):
                 await create_task_limited(
                     tg, self.sem, self.flush_pending_downstreams_for(node)
                 )
+
+    async def _on_shutdown_requested(self, _: P) -> None:
+        async with self.dep_chain.lock() as mgr:
+            unresolved_deps = tuple(mgr.get_pending_edges())
+
+        from ..dispatcher.event import UnresolvedDepsDetected
+
+        if unresolved_deps:
+            await self.observer.trigger(
+                UnresolvedDepsDetected(  # type: ignore[reportArgumentType]
+                    tuple(
+                        map(
+                            lambda edge: UnresolvedDependencyError(
+                                "{ctx[resource_ref]!r} references undefined "
+                                "{ctx[dependency_ref]!r}",
+                                ctx=UnresolvedDependencyError.Context(
+                                    resource_ref=edge[1].absolute_path,
+                                    dependency_ref=edge[0].absolute_path,
+                                ),
+                            ),
+                            unresolved_deps,
+                        )
+                    )
+                )
+            )
