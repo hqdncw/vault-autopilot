@@ -9,8 +9,9 @@ from .. import dto
 from ..dispatcher import event
 from ..service import IssuerService
 from ..service.abstract import ApplyResult
-from ..util.dependency_chain import AbstractNode, FallbackNode
 from .abstract import (
+    AbstractFallbackNode,
+    AbstractNode,
     ChainBasedProcessor,
     SecretsEngineFallbackNode,
 )
@@ -23,11 +24,13 @@ class IssuerNode(AbstractNode):
     payload: dto.IssuerApplyDTO = field(repr=False)
 
     def __repr__(self) -> str:
-        return f"IssuerNode({hash(self)})"
+        return (
+            f"IssuerNode(node_hash={hash(self)}, absolute_path={self.absolute_path!r})"
+        )
 
     @override
     def __hash__(self) -> int:
-        return hash(self.payload.absolute_path())
+        return hash(self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.IssuerApplyDTO) -> "IssuerNode":
@@ -40,22 +43,11 @@ class IssuerNode(AbstractNode):
         Returns:
             A new instance of the IssuerNode class.
         """
-        return cls(payload)
+        return cls(payload.absolute_path(), payload)
 
 
 @dataclass(slots=True)
-class IssuerFallbackNode(FallbackNode):
-    @classmethod
-    def from_issuer_absolute_path(cls, path: str) -> "IssuerFallbackNode":
-        """
-        Creates a new :class:`IssuerFallbackNode` instance from an issuer absolute path.
-
-        Args:
-            path: The path must be in the format ``pki/my-issuer`` where ``pki`` is the
-                PKI engine mount path and ``my-issuer`` is the name of the issuer.
-        """
-        return cls(hash(path))
-
+class IssuerFallbackNode(AbstractFallbackNode):
     @override
     def __hash__(self) -> int:
         return self.node_hash
@@ -78,7 +70,7 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
 
         if node.payload.spec.get("chaining"):
             return (
-                IssuerFallbackNode.from_issuer_absolute_path(
+                IssuerFallbackNode.from_absolute_path(
                     node.payload.upstream_issuer_absolute_path()
                 ),
             )
@@ -123,8 +115,10 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
                 case _ as status:
                     raise NotImplementedError(status)
         finally:
-            logger.debug("applying finished %r", payload.absolute_path())
-            await self.observer.trigger(ev)
+            if "ev" in locals().keys():
+                logger.debug("applying finished %r", payload.absolute_path())
+
+                await self.observer.trigger(ev)
 
         if error := result.get("error"):
             raise error

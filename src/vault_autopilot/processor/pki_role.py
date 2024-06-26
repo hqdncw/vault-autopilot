@@ -10,8 +10,7 @@ from vault_autopilot.service.abstract import ApplyResult
 from .. import dto
 from ..dispatcher import event
 from ..service import PKIRoleService
-from ..util.dependency_chain import AbstractNode
-from .abstract import ChainBasedProcessor
+from .abstract import AbstractNode, ChainBasedProcessor
 from .issuer import IssuerFallbackNode
 
 logger = logging.getLogger(__name__)
@@ -23,11 +22,11 @@ class PKIRoleNode(AbstractNode):
 
     @override
     def __hash__(self) -> int:
-        return hash(self.payload.absolute_path())
+        return hash(self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.PKIRoleApplyDTO) -> "PKIRoleNode":
-        return cls(payload)
+        return cls(payload.absolute_path(), payload)
 
 
 NodeType = PKIRoleNode | IssuerFallbackNode
@@ -46,7 +45,7 @@ class PKIRoleApplyProcessor(
         assert isinstance(node, PKIRoleNode), node
 
         return (
-            IssuerFallbackNode.from_issuer_absolute_path(
+            IssuerFallbackNode.from_absolute_path(
                 node.payload.issuer_ref_absolute_path()
             ),
         )
@@ -77,7 +76,7 @@ class PKIRoleApplyProcessor(
     @override
     def upstream_node_builder(self, ev: event.EventType) -> NodeType:
         assert isinstance(ev, event.IssuerApplySuccess), ev
-        return IssuerFallbackNode.from_issuer_absolute_path(ev.resource.absolute_path())
+        return IssuerFallbackNode.from_absolute_path(ev.resource.absolute_path())
 
     @override
     def downstream_selector(self, node: NodeType) -> bool:
@@ -117,8 +116,10 @@ class PKIRoleApplyProcessor(
                 case _ as status:
                     raise NotImplementedError(status)
         finally:
-            logger.debug("applying finished %r", payload.absolute_path())
-            await self.observer.trigger(ev)
+            if "ev" in locals().keys():
+                logger.debug("applying finished %r", payload.absolute_path())
+
+                await self.observer.trigger(ev)
 
         if error := result.get("error"):
             raise error

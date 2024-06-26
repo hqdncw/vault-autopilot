@@ -3,8 +3,9 @@ from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generic, TypeVar
 
-from .. import dto, util
-from ..util.coro import create_task_limited
+from .. import dto
+from ..exc import UnresolvedDependencyError
+from ..util.coro import BoundlessSemaphore, create_task_limited
 
 T = TypeVar("T")
 
@@ -38,7 +39,7 @@ class EventObserver(Generic[T]):
         async with asyncio.TaskGroup() as tg:
             for handler in filter(lambda h: type(event) in h.filter, self._handlers):
                 await create_task_limited(
-                    tg, util.coro.BoundlessSemaphore(), handler.callback(event)
+                    tg, BoundlessSemaphore(), handler.callback(event)
                 )
 
 
@@ -290,6 +291,25 @@ class ShutdownRequested:
     """
 
 
+@dataclass(slots=True)
+class UnresolvedDepsDetected:
+    """
+    This event is raised when the system encounters one or more resources that reference
+    dependencies that are not defined in any of the provided manifests.
+
+    Attributes:
+        unresolved_deps: A tuple of ``UnresolvedDependencyError`` objects, each
+            representing a resource with an unresolved dependency.
+
+    Notes:
+        This event is typically used to notify the system or users about the presence of
+        unresolved dependencies, which can prevent resources from being properly
+        deployed or configured.
+    """
+
+    unresolved_deps: tuple[UnresolvedDependencyError, ...]
+
+
 ResourceApplicationRequested = (
     PasswordApplicationRequested
     | IssuerApplicationRequested
@@ -450,4 +470,5 @@ EventType = (
     | SSHKeyUpdateSuccess
     | SSHKeyVerifySuccess
     | ShutdownRequested
+    | UnresolvedDepsDetected
 )

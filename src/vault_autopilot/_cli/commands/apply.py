@@ -1,6 +1,8 @@
 import asyncio
 import glob
 import pathlib
+import signal
+from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from logging import getLogger
@@ -103,24 +105,65 @@ def raise_unexpected_exc(ex: Exception) -> NoReturn:
     raise CLIError("Unexpected error: %r" % ex, exit_code=128) from ex
 
 
+@dataclass(slots=True)
+class AppContext:
+    settings: _conf.Settings
+    client: asyva.Client
+    issuer_repo: SnapshotRepo[IssuerSnapshot]
+
+
+async def flush_database(ctx: AppContext) -> None:
+    if ctx.client.is_authenticated and ctx.issuer_repo.storage:
+        await ctx.client.update_or_create_kvv1_secret(
+            mount_path=ctx.settings.storage["secrets_engine_path"],
+            path=ctx.settings.storage["snapshots_secret_path"],
+            data=ctx.issuer_repo.storage,
+        )
+
+
+def handle_exception(ex: Exception) -> NoReturn:
+    while True:
+        if isinstance(ex, ExceptionGroup):
+            ex = ex.exceptions[0]
+            continue
+        break
+
+    if isinstance(ex, asyva.exc.UnauthorizedError):
+        raise CLIError("Authorization failed: %s" % ex) from ex
+
+    if isinstance(ex, (exc.ManifestError, ConnectionRefusedError)):
+        raise CLIError(str(ex)) from ex
+
+    if isinstance(
+        ex,
+        (
+            # TODO: Instead of just saying "Policy not found", provide the user with
+            #  a more informative error message that includes the line number in the
+            #  manifest file where the policy path was defined.
+            asyva.exc.PasswordPolicyNotFoundError,
+            asyva.exc.SecretsEnginePathInUseError,
+            exc.ResourceIntegrityError,
+        ),
+    ):
+        # TODO: print the contents of a YAML file, highlighting any invalid
+        #  lines.
+        raise CLIError(str(ex), exit_code=128) from ex
+
+    if isinstance(ex, CLIError):
+        raise ex
+
+    raise_unexpected_exc(ex)
+
+
 async def async_apply(
-    settings: _conf.Settings,
-    client: asyva.Client,
+    ctx: AppContext,
     patterns: Sequence[str],
     recursive: bool,
+    stage: ApplyManifestsStage,
 ) -> None:
+    client, settings, issuer_repo = ctx.client, ctx.settings, ctx.issuer_repo
     queue = asyncio.Queue[ManifestObject | None]()
-
-    workflow = Workflow([ApplyManifestsStage()])
-    stages = workflow.run()
-
-    stage = await stages.__anext__()
-    assert isinstance(stage, ApplyManifestsStage), stage
-
-    issuer_repo = SnapshotRepo[IssuerSnapshot](
-        {},
-        IssuerSnapshot,
-    )
+    unresolved_deps: list[exc.UnresolvedDependencyError] = []
 
     async def authenticate_client() -> asyva.Client:
         return await client.authenticate(
@@ -162,14 +205,6 @@ async def async_apply(
             )
             else {}
         )
-
-    async def flush_database() -> None:
-        if client.is_authenticated and issuer_repo.storage:
-            await client.update_or_create_kvv1_secret(
-                mount_path=settings.storage["secrets_engine_path"],
-                path=settings.storage["snapshots_secret_path"],
-                data=issuer_repo.storage,
-            )
 
     async def configure_dispatcher() -> (
         Dispatcher[ManifestObject | None, event.EventType]
@@ -223,11 +258,13 @@ async def async_apply(
                     # TODO: Allow processors to share the same dependency chain to
                     #  reduce memory consumption.
                     dep_chain=Mutex(DependencyChain()),
+                    shutdown_event=event.ShutdownRequested,
                     **proc_kwargs(),
                 ),
                 "Issuer": IssuerApplyProcessor(
                     iss_svc=IssuerService(client, issuer_repo),
                     dep_chain=Mutex(DependencyChain()),
+                    shutdown_event=event.ShutdownRequested,
                     **proc_kwargs(),
                 ),
                 "PasswordPolicy": PasswordPolicyApplyProcessor(
@@ -236,6 +273,7 @@ async def async_apply(
                 "PKIRole": PKIRoleApplyProcessor(
                     pki_role_svc=PKIRoleService(client),
                     dep_chain=Mutex(DependencyChain()),
+                    shutdown_event=event.ShutdownRequested,
                     **proc_kwargs(),
                 ),
                 "SecretsEngine": SecretsEngineApplyProcessor(
@@ -244,6 +282,7 @@ async def async_apply(
                 "SSHKey": SSHKeyApplyProcessor(
                     ssh_key_svc=SSHKeyService(client),
                     dep_chain=Mutex(DependencyChain()),
+                    shutdown_event=event.ShutdownRequested,
                     **proc_kwargs(),
                 ),
             },
@@ -318,6 +357,9 @@ async def async_apply(
                 style=template[1],
             )
 
+        async def on_unresolved_deps_detected(ev: event.UnresolvedDepsDetected) -> None:
+            unresolved_deps.extend([*ev.unresolved_deps])
+
         dispatcher.register_handler(
             (
                 event.PasswordApplicationRequested,
@@ -371,6 +413,9 @@ async def async_apply(
             ),
             callback=on_resource_update,
         )
+        dispatcher.register_handler(
+            (event.UnresolvedDepsDetected,), callback=on_unresolved_deps_detected
+        )
 
         return dispatcher
 
@@ -423,51 +468,31 @@ async def async_apply(
     except Exception as ex:
         err = ex
 
-    try:
-        await flush_database()
-    except Exception as ex:
-        if err is None:
-            err = ex
-
     if err is not None:
-        workflow.stop("failed")
+        handle_exception(err)
 
-        click.echo("\nOops! Something went wrong while applying the manifests.\n")
+    if unresolved_deps:
+        raise CLIError(
+            "Unable to continue due to unresolved dependencies. The following "
+            "resources reference undefined dependencies:\n%s\n\nPlease ensure that all "
+            "dependencies are defined before they are used."
+            % "\n".join(("  * " + str(err) for err in unresolved_deps))
+        )
 
-        while True:
-            if isinstance(err, ExceptionGroup):
-                err = err.exceptions[0]
-                continue
-            break
 
-        if isinstance(err, asyva.exc.UnauthorizedError):
-            raise CLIError("Authorization failed: %s" % err) from err
+async def graceful_shutdown(workflow: Workflow, client: asyva.Client, reason: str):
+    workflow.stop(reason)
 
-        if isinstance(err, (exc.ManifestError, ConnectionRefusedError)):
-            raise CLIError(str(err)) from err
+    if reason != "finished":
+        tasks = [
+            task for task in asyncio.all_tasks() if task is not asyncio.current_task()
+        ]
+        [task.cancel() for task in tasks]
 
-        if isinstance(
-            err,
-            (
-                # TODO: Instead of just saying "Policy not found", provide the user with
-                #  a more informative error message that includes the line number in the
-                #  manifest file where the policy path was defined.
-                asyva.exc.PasswordPolicyNotFoundError,
-                asyva.exc.SecretsEnginePathInUseError,
-                exc.ResourceIntegrityError,
-            ),
-        ):
-            # TODO: print the contents of a YAML file, highlighting any invalid
-            #  lines.
-            raise CLIError(str(err), exit_code=128) from err
+        with suppress(asyncio.CancelledError):
+            await asyncio.gather(*tasks)
 
-        if isinstance(err, CLIError):
-            raise err
-
-        raise_unexpected_exc(err)
-
-    workflow.stop("finished")
-    click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
+    await client.__aexit__()
 
 
 # TODO: epilog https://click.palletsprojects.com/en/8.1.x/documentation/#command-epilog-help
@@ -521,14 +546,53 @@ def apply(
     if not (settings := ctx.find_object(_conf.Settings)):
         raise RuntimeError("Configuration not found")
 
-    client = asyva.Client()
+    client, workflow, issuer_repo = (
+        asyva.Client(),
+        Workflow([ApplyManifestsStage()]),
+        SnapshotRepo[IssuerSnapshot](
+            {},
+            IssuerSnapshot,
+        ),
+    )
+    app_ctx = AppContext(settings, client, issuer_repo)
+
+    for sig in (
+        signal.SIGHUP,
+        signal.SIGTERM,
+        signal.SIGINT,
+        signal.SIGTSTP,
+        signal.SIG_IGN,
+    ):
+        event_loop.add_signal_handler(
+            sig,
+            lambda: asyncio.create_task(graceful_shutdown(workflow, client, "aborted")),
+        )
 
     try:
-        event_loop.run_until_complete(
-            async_apply(settings, client, filename, recursive)
+        stages = workflow.run()
+
+        stage = event_loop.run_until_complete(stages.__anext__())
+        assert isinstance(stage, ApplyManifestsStage), stage
+
+        event_loop.run_until_complete(async_apply(app_ctx, filename, recursive, stage))
+    except asyncio.CancelledError:
+        raise click.Abort()
+    except Exception as ex:
+        event_loop.run_until_complete(graceful_shutdown(workflow, client, "failed"))
+        click.secho(
+            "\nOops! Something went wrong while applying the manifests.\n", fg="red"
         )
+        handle_exception(ex)
+    else:
+        event_loop.run_until_complete(graceful_shutdown(workflow, client, "finished"))
     finally:
-        event_loop.run_until_complete(client.__aexit__())
-        # Zero-sleep to allow underlying connections to close
-        # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
-        event_loop.run_until_complete(asyncio.sleep(0))
+        try:
+            event_loop.run_until_complete(flush_database(app_ctx))
+        except Exception as ex:
+            handle_exception(ex)
+
+    click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
+
+    # Zero-sleep to allow underlying connections to close
+    # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
+    event_loop.run_until_complete(asyncio.sleep(0))
