@@ -46,8 +46,18 @@ repos:
     hooks:
       - id: basedpyright
         additional_dependencies:
-          - "click~=8.1.7"
           - "pydantic~=2.7.1"
-          - "ruamel.yaml~=0.18.5"
-          - "lazy-object-proxy~=1.9.0"
           - "pydantic-settings~=2.3.3"
+          - "aiohttp~=3.9.5"
+          - "lazy-object-proxy~=1.9.0"
+          - "networkx~=3.3.0"
+          - "ironfence~=0.1.0"
+          - "humanize~=4.9.0"
+          - "deepdiff[optimize]~=7.0.1"
+          - "pyhumps~=3.8.0"
+          - "cryptography~=42.0.8"
+          - "python-hcl2~=4.3.4"
+          - "jinja2~=3.1.3"
+          - "click~=8.1.7"
+          - "ruamel.yaml~=0.18.5"
+          - "rich~=13.7.1"
