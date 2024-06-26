@@ -40,6 +40,10 @@ class Workflow:
     def current_stage(self) -> Optional[AbstractStage]:
         return self._stages[self._index] if self._index != -1 else None
 
+    @property
+    def is_stopped(self) -> bool:
+        return bool(self._stop_reason)
+
     def __del__(self) -> None:
         self.stop("cancelled")
 

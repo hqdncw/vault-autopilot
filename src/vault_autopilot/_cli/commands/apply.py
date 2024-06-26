@@ -110,6 +110,7 @@ class AppContext:
     settings: _conf.Settings
     client: asyva.Client
     issuer_repo: SnapshotRepo[IssuerSnapshot]
+    workflow: Workflow
 
 
 async def flush_database(ctx: AppContext) -> None:
@@ -121,7 +122,11 @@ async def flush_database(ctx: AppContext) -> None:
         )
 
 
-def handle_exception(ex: Exception) -> NoReturn:
+def handle_exception(ex: Exception, ctx: AppContext) -> NoReturn:
+    asyncio.get_event_loop().run_until_complete(
+        graceful_shutdown(ctx.workflow, ctx.client, "failed")
+    )
+
     while True:
         if isinstance(ex, ExceptionGroup):
             ex = ex.exceptions[0]
@@ -473,9 +478,17 @@ async def async_apply(
 
 
 async def graceful_shutdown(workflow: Workflow, client: asyva.Client, reason: str):
-    workflow.stop(reason)
+    is_failed = reason != "finished"
 
-    if reason != "finished":
+    if not workflow.is_stopped:
+        workflow.stop(reason)
+
+        if is_failed:
+            click.secho(
+                "\nOops! Something went wrong while applying the manifests.\n", fg="red"
+            )
+
+    if is_failed:
         tasks = [
             task for task in asyncio.all_tasks() if task is not asyncio.current_task()
         ]
@@ -546,7 +559,7 @@ def apply(
             IssuerSnapshot,
         ),
     )
-    app_ctx = AppContext(settings, client, issuer_repo)
+    app_ctx = AppContext(settings, client, issuer_repo, workflow)
 
     for sig in (
         signal.SIGHUP,
@@ -570,18 +583,16 @@ def apply(
     except asyncio.CancelledError:
         raise click.Abort()
     except Exception as ex:
-        event_loop.run_until_complete(graceful_shutdown(workflow, client, "failed"))
-        click.secho(
-            "\nOops! Something went wrong while applying the manifests.\n", fg="red"
-        )
-        handle_exception(ex)
-    else:
-        event_loop.run_until_complete(graceful_shutdown(workflow, client, "finished"))
+        handle_exception(ex, app_ctx)
     finally:
         try:
             event_loop.run_until_complete(flush_database(app_ctx))
         except Exception as ex:
-            handle_exception(ex)
+            handle_exception(ex, app_ctx)
+        else:
+            event_loop.run_until_complete(
+                graceful_shutdown(workflow, client, "finished")
+            )
 
     click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
 
