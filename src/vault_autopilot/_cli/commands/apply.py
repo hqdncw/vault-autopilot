@@ -453,23 +453,15 @@ async def async_apply(
         await initialize_database()
         await (await configure_dispatcher()).dispatch()
 
-    err = None
-
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(handle_manifests())
-            tg.create_task(
-                ManifestParser(
-                    stream_data_from_files() if patterns else stream_data_from_stdin(),
-                    ManifestObject,
-                    queue,
-                ).execute()
-            )
-    except Exception as ex:
-        err = ex
-
-    if err is not None:
-        handle_exception(err)
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(handle_manifests())
+        tg.create_task(
+            ManifestParser(
+                stream_data_from_files() if patterns else stream_data_from_stdin(),
+                ManifestObject,
+                queue,
+            ).execute()
+        )
 
     if unresolved_deps:
         raise CLIError(
