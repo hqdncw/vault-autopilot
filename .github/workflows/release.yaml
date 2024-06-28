@@ -29,7 +29,7 @@ jobs:
           # root_options: "-vv"
 
       - name: Publish package distributions to PyPI
-        if: steps.release.outputs.released
+        if: steps.release.outputs.released == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           print-hash: true
@@ -37,14 +37,14 @@ jobs:
           # verbose: true
 
       - name: Publish package distributions to GitHub Releases
-        if: steps.release.outputs.released
+        if: steps.release.outputs.released == 'true'
         uses: python-semantic-release/upload-to-gh-release@main
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
 
   docs-release:
-    if: needs.package-release.outputs.released
+    if: needs.package-release.outputs.released == 'true'
     needs: package-release
     runs-on: ubuntu-22.04
     environment:
@@ -93,7 +93,7 @@ jobs:
         uses: actions/deploy-pages@v4
 
   image-release:
-    if: needs.package-release.outputs.released
+    if: needs.package-release.outputs.released == 'true'
     needs: package-release
     runs-on: ubuntu-22.04
     permissions:
