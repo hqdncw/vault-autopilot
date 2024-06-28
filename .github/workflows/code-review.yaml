@@ -1,0 +1,15 @@
+# Runs pre-commit hooks on pull requests targeting the main branch
+
+name: Automated Code Review
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pre-commit/action@v3
