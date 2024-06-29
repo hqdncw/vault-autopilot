@@ -594,7 +594,7 @@ def apply(
                 graceful_shutdown(workflow, client, "finished")
             )
 
-    click.secho("Thanks for choosing Vault Autopilot!", fg="yellow")
+    click.secho("\nThanks for choosing Vault Autopilot!", fg="yellow")
 
     # Zero-sleep to allow underlying connections to close
     # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
