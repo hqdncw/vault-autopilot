@@ -426,19 +426,21 @@ async def async_apply(
 
     def stream_data_from_files() -> Iterator[IO[bytes]]:
         """Yields an iterator of binary file objects for regular files matching given
-        patterns (simple filenames or globs). Skips dirs if recursive is False;
+        patterns (simple filenames or globs). Skips dirs if ``recursive`` is ``False``;
         otherwise, includes all matching files in the dir."""
         for pat in patterns:
             counter = 0
 
-            for fn in glob.iglob(pat, recursive=recursive):
-                if pathlib.Path(fn).is_dir():
-                    continue
-
+            for counter, fn in enumerate(
+                (
+                    fn
+                    for fn in glob.iglob(pat, recursive=recursive)
+                    if not pathlib.Path(fn).is_dir()
+                ),
+                1,
+            ):
                 logger.debug("streaming manifest %r", fn)
                 yield open(fn, "rb")
-
-                counter += 1
 
             if counter == 0:
                 raise CLIError(
