@@ -129,7 +129,7 @@ Vault Autopilot CLI within a Docker container, with some initial configuration:
 .. prompt:: bash
 
   alias vault-autopilot=' \
-  docker run --rm --network host \
+  docker run -i --rm --network host \
   -e BASEURL="http://localhost:8200" \
   -e AUTH__METHOD="token" \
   -e AUTH__TOKEN="insecure-dev-only-token" \
@@ -243,7 +243,7 @@ policies and secrets.
   $ docker exec -i dev-vault sh -- <<EOF
   export VAULT_ADDR=http://127.0.0.1:8200
   vault login -- token="insecure-dev-only-token"
-  vault kv get secret/hello
+  vault kv get kv/hello
   vault kv get sys/policies/password/example
   EOF
 
@@ -310,9 +310,6 @@ including the secret and password policy defined in your manifest.
 Managing Configuration Updates
 ==============================
 
-Need to make some changes to your Vault server's configuration? No problem!
-Just modify the manifest file and re-run the ``vault-autopilot apply`` command.
-
 Let's say you want to beef up your password policy by requiring longer
 passwords. Previously, the policy required a password of exactly 32 characters,
 but now you want to bump that up to 64. Easy peasy! Just update the
@@ -337,16 +334,15 @@ but now you want to bump that up to 64. Easy peasy! Just update the
           minChars: 1
   ...
 
-After modifying the manifest file, run the ``vault-autopilot apply`` command
-again to apply the changes to your Vault server:
+After modifying the manifest file, run the ``vault-autopilot apply <
+manifest.yaml`` command again to apply the changes to your Vault server:
 
 .. code:: bash
 
-  $ vault-autopilot apply < manifest.yaml
   [+] Applying manifests (0.0251 seconds) FINISHED
-   => Verifying integrity of Password 'kv/hello'... done
-   => Updating PasswordPolicy 'example'... done
    => Verifying integrity of SecretsEngine 'kv'... done
+   => Updating PasswordPolicy 'example'... done
+   => Verifying integrity of Password 'kv/hello'... done
   Thanks for choosing Vault Autopilot!
 
 Vault Autopilot will update the password policy on your Vault server to reflect the changes in the manifest file.
