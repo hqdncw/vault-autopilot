@@ -56,7 +56,7 @@ class ApplyResult(TypedDict):
 @dataclass(kw_only=True)
 class ResourceApplyMixin(Generic[P, S]):
     client: AsyvaClient
-    immutable_field_pats: ClassVar[tuple[str, ...]] = tuple()
+    immutable_fields: ClassVar[tuple[str, ...]] = tuple()
 
     @abstractmethod
     async def build_snapshot(self, payload: P) -> S | None: ...
@@ -87,15 +87,11 @@ class ResourceApplyMixin(Generic[P, S]):
             logger.debug("[%s] diff: %r", self.__class__.__name__, diff)
             is_update = True
 
-            if immut_field_errors := tuple(
+            if errors := tuple(
                 self._create_immut_field_error(diff, payload, immut_field)
                 for immut_field in filter(
                     lambda loc: next(
-                        (
-                            True
-                            for pat in self.immutable_field_pats
-                            if fnmatch(loc, pat)
-                        ),
+                        (True for pat in self.immutable_fields if fnmatch(loc, pat)),
                         False,
                     ),
                     (v for inner in diff.values() for v in inner.keys()),
@@ -103,7 +99,7 @@ class ResourceApplyMixin(Generic[P, S]):
             ):
                 return ApplyResult(
                     status="update_error",
-                    error=ExceptionGroup("Failed to update issuer", immut_field_errors),
+                    error=ExceptionGroup("Failed to update issuer", errors),
                 )
         else:
             is_update = False

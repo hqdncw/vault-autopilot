@@ -14,7 +14,6 @@ from pydantic import Field
 from rich.console import Group, RenderableType
 from rich.text import Text
 from vault_autopilot import dto
-from vault_autopilot._pkg.asyva.exc import SecretsEnginePathInUseError
 from vault_autopilot.parser import AbstractManifestObject, ManifestParser
 from vault_autopilot.processor.issuer import IssuerApplyProcessor
 from vault_autopilot.processor.password import PasswordApplyProcessor
@@ -23,6 +22,7 @@ from vault_autopilot.processor.pki_role import PKIRoleApplyProcessor
 from vault_autopilot.processor.secrets_engine import SecretsEngineApplyProcessor
 from vault_autopilot.processor.ssh_key import SSHKeyApplyProcessor
 from vault_autopilot.repo.snapshot import SnapshotRepo
+from vault_autopilot.storage import KvV2SecretStorage
 from vault_autopilot.util.dependency_chain import DependencyChain
 
 from ... import _conf, exc
@@ -37,6 +37,7 @@ from ...service import (
     SSHKeyService,
 )
 from ...service._issuer import IssuerSnapshot
+from ...service._secrets_engine import SecretsEngineSnapshot
 from ...util.coro import BoundlessSemaphore
 from ..exc import CLIError
 from ..workflow import AbstractRenderer, AbstractStage, Workflow
@@ -100,26 +101,12 @@ class ApplyManifestsStage(AbstractStage):
     renderer: RecordRenderer = field(default_factory=RecordRenderer)
 
 
-def raise_unexpected_exc(ex: Exception) -> NoReturn:
-    logger.debug(ex, exc_info=ex)
-    raise CLIError("Unexpected error: %r" % ex, exit_code=128) from ex
-
-
 @dataclass(slots=True)
 class AppContext:
     settings: _conf.Settings
     client: asyva.Client
-    issuer_repo: SnapshotRepo[IssuerSnapshot]
+    storage: KvV2SecretStorage
     workflow: Workflow
-
-
-async def flush_database(ctx: AppContext) -> None:
-    if ctx.client.is_authenticated and ctx.issuer_repo.storage:
-        await ctx.client.update_or_create_kvv1_secret(
-            mount_path=ctx.settings.storage["secrets_engine_path"],
-            path=ctx.settings.storage["snapshots_secret_path"],
-            data=ctx.issuer_repo.storage,
-        )
 
 
 def handle_exception(ex: Exception, ctx: AppContext) -> NoReturn:
@@ -157,7 +144,8 @@ def handle_exception(ex: Exception, ctx: AppContext) -> NoReturn:
     if isinstance(ex, CLIError):
         raise ex
 
-    raise_unexpected_exc(ex)
+    logger.debug(ex, exc_info=ex)
+    raise CLIError("Unexpected error: %r" % ex, exit_code=128) from ex
 
 
 async def async_apply(
@@ -166,50 +154,9 @@ async def async_apply(
     recursive: bool,
     stage: ApplyManifestsStage,
 ) -> None:
-    client, settings, issuer_repo = ctx.client, ctx.settings, ctx.issuer_repo
+    client = ctx.client
     queue = asyncio.Queue[ManifestObject | None]()
     unresolved_deps: list[exc.UnresolvedDependencyError] = []
-
-    async def authenticate_client() -> asyva.Client:
-        return await client.authenticate(
-            base_url=settings.base_url,
-            authn=settings.auth,
-            namespace=settings.default_namespace,
-        )
-
-    async def initialize_database() -> None:
-        try:
-            await client.enable_secrets_engine(
-                type="kv-v1",
-                path=settings.storage["secrets_engine_path"],
-                description=(
-                    "Important: Do not modify or delete. This secrets engine is "
-                    "automatically generated and managed by the Vault-Autopilot CLI. "
-                    "Any unauthorized changes may result in resource desynchronization "
-                    "and data loss."
-                ),
-            )
-        except SecretsEnginePathInUseError:
-            logger.debug(
-                "the secrets engine %r is already created",
-                settings.storage["secrets_engine_path"],
-            )
-        else:
-            logger.debug(
-                "the secrets engine %r has been created",
-                settings.storage["secrets_engine_path"],
-            )
-
-        issuer_repo.storage = (
-            raw_data.data
-            if (
-                raw_data := await client.read_kvv1_secret(
-                    mount_path=settings.storage["secrets_engine_path"],
-                    path=settings.storage["snapshots_secret_path"],
-                )
-            )
-            else {}
-        )
 
     async def configure_dispatcher() -> (
         Dispatcher[ManifestObject | None, event.EventType]
@@ -267,7 +214,9 @@ async def async_apply(
                     **proc_kwargs(),
                 ),
                 "Issuer": IssuerApplyProcessor(
-                    iss_svc=IssuerService(client, issuer_repo),
+                    iss_svc=IssuerService(
+                        client, SnapshotRepo("issuer_", ctx.storage, IssuerSnapshot)
+                    ),
                     dep_chain=Mutex(DependencyChain()),
                     shutdown_event=event.ShutdownRequested,
                     **proc_kwargs(),
@@ -282,7 +231,13 @@ async def async_apply(
                     **proc_kwargs(),
                 ),
                 "SecretsEngine": SecretsEngineApplyProcessor(
-                    secrets_engine_svc=SecretsEngineService(client), **proc_kwargs()
+                    secrets_engine_svc=SecretsEngineService(
+                        client,
+                        SnapshotRepo(
+                            "secrets_engine_", ctx.storage, SecretsEngineSnapshot
+                        ),
+                    ),
+                    **proc_kwargs(),
                 ),
                 "SSHKey": SSHKeyApplyProcessor(
                     ssh_key_svc=SSHKeyService(client),
@@ -456,8 +411,13 @@ async def async_apply(
         yield click.get_binary_stream("stdin")
 
     async def handle_manifests():
-        await authenticate_client()
-        await initialize_database()
+        await client.authenticate(
+            base_url=ctx.settings.base_url,
+            authn=ctx.settings.auth,
+            namespace=ctx.settings.default_namespace,
+        )
+        await ctx.storage.initialize()
+        await ctx.storage.pull()
         await (await configure_dispatcher()).dispatch()
 
     async with asyncio.TaskGroup() as tg:
@@ -498,8 +458,6 @@ async def graceful_shutdown(workflow: Workflow, client: asyva.Client, reason: st
 
         with suppress(asyncio.CancelledError):
             await asyncio.gather(*tasks)
-
-    await client.__aexit__()
 
 
 # TODO: epilog https://click.palletsprojects.com/en/8.1.x/documentation/#command-epilog-help
@@ -548,20 +506,25 @@ def apply(
       # Apply a manifest from standard input
       $ cat manifest.yaml | vault-autopilot apply
     """
-    event_loop = asyncio.get_event_loop()
+    ev_loop = asyncio.get_event_loop()
 
     if not (settings := ctx.find_object(_conf.Settings)):
         raise RuntimeError("Configuration not found")
 
-    client, workflow, issuer_repo = (
+    client, workflow = (
         asyva.Client(),
         Workflow([ApplyManifestsStage()]),
-        SnapshotRepo[IssuerSnapshot](
-            {},
-            IssuerSnapshot,
-        ),
     )
-    app_ctx = AppContext(settings, client, issuer_repo, workflow)
+    app_ctx = AppContext(
+        settings,
+        client,
+        KvV2SecretStorage(
+            secrets_engine_path=settings.storage["secrets_engine_path"],
+            snapshots_secret_path=settings.storage["snapshots_secret_path"],
+            client=client,
+        ),
+        workflow,
+    )
 
     for sig in (
         signal.SIGHUP,
@@ -570,7 +533,7 @@ def apply(
         signal.SIGTSTP,
         signal.SIG_IGN,
     ):
-        event_loop.add_signal_handler(
+        ev_loop.add_signal_handler(
             sig,
             lambda: asyncio.create_task(graceful_shutdown(workflow, client, "aborted")),
         )
@@ -578,26 +541,24 @@ def apply(
     try:
         stages = workflow.run()
 
-        stage = event_loop.run_until_complete(stages.__anext__())
+        stage = ev_loop.run_until_complete(stages.__anext__())
         assert isinstance(stage, ApplyManifestsStage), stage
 
-        event_loop.run_until_complete(async_apply(app_ctx, filename, recursive, stage))
+        ev_loop.run_until_complete(async_apply(app_ctx, filename, recursive, stage))
     except asyncio.CancelledError:
         raise click.Abort()
     except Exception as ex:
         handle_exception(ex, app_ctx)
     finally:
         try:
-            event_loop.run_until_complete(flush_database(app_ctx))
+            ev_loop.run_until_complete(app_ctx.storage.push())
         except Exception as ex:
             handle_exception(ex, app_ctx)
-        else:
-            event_loop.run_until_complete(
-                graceful_shutdown(workflow, client, "finished")
-            )
+
+        ev_loop.run_until_complete(graceful_shutdown(workflow, client, "finished"))
 
     click.secho("\nThanks for choosing Vault Autopilot!", fg="yellow")
 
     # Zero-sleep to allow underlying connections to close
     # https://docs.aiohttp.org/en/stable/client_advanced.html?highlight=sleep#graceful-shutdown
-    event_loop.run_until_complete(asyncio.sleep(0))
+    ev_loop.run_until_complete(asyncio.sleep(0))

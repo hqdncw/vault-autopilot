@@ -36,7 +36,7 @@ IssuerSnapshot = dto.IssuerApplyDTO
 class IssuerService(ResourceApplyMixin[dto.IssuerApplyDTO, IssuerSnapshot]):
     client: asyva.Client
     repo: SnapshotRepo[IssuerSnapshot]
-    immutable_field_pats: ClassVar[tuple[str, ...]] = (
+    immutable_fields: ClassVar[tuple[str, ...]] = (
         "root[[]'spec'[]][[]'certificate'[]]**",
     )
 
