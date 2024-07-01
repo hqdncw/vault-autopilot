@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  package-release:
+    runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    concurrency: push
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # https://python-semantic-release.readthedocs.io/en/latest/algorithm.html#implementation
+          fetch-depth: 0
+
+      - name: Python semantic release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v9.8.3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          changelog: false
+          # root_options: "-vv"
+
+      - name: Publish package distributions to PyPI
+        if: steps.release.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          # repository-url: https://test.pypi.org/legacy/
+          # verbose: true
+
+      - name: Publish package distributions to GitHub Releases
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/upload-to-gh-release@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.release.outputs.tag }}
+
+  docs-release:
+    if: needs.package-release.outputs.released == 'true'
+    needs: package-release
+    runs-on: ubuntu-22.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{needs.package-release.outputs.tag}}
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.11.2
+          cache: pip
+
+      - name: Create Python virtual environment
+        run: "python3 -m venv .venv"
+
+      - name: Install dependencies
+        run: |
+          bash ./shell_scripts/install_dependencies.sh docs,cli
+
+      - name: Build documentation
+        run: |
+          bash ./shell_scripts/sphinx_pre_build.sh
+          bash ./shell_scripts/sphinx_build.sh
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/_build/html
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+  image-release:
+    if: needs.package-release.outputs.released == 'true'
+    needs: package-release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    env:
+      REGISTRY: docker.io
+      IMAGE_NAME: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{needs.package-release.outputs.tag}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}},value=${{needs.package-release.outputs.tag}}
+            type=semver,pattern={{major}}.{{minor}},value=${{needs.package-release.outputs.tag}}
+            type=semver,pattern={{major}},value=${{needs.package-release.outputs.tag}}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./
+          file: ./docker/Dockerfile
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Attest
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+      - name: Update image description on Docker Hub
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+          readme-filepath: ./docker/README.md

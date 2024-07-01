@@ -28,7 +28,6 @@ extensions = [
     # "sphinx.ext.autodoc",
     "sphinx_prompt",
     "sphinx_sitemap",
-    "myst_parser",
     "sphinx_inline_tabs",
     "sphinx_togglebutton",
     "sphinx_click",
@@ -40,7 +39,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_baseurl = "http://ndavm.local"
+html_baseurl = "https://hqdncw.github.io/vault-autopilot"
 html_theme = "furo"
 html_title = f"{project} documentation v{release}"
 htmlhelp_basename = "vault-autopilot-releasedoc"
