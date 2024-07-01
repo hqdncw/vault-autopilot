@@ -418,7 +418,14 @@ async def async_apply(
         )
         await ctx.storage.initialize()
         await ctx.storage.pull()
-        await (await configure_dispatcher()).dispatch()
+
+        num = await (await configure_dispatcher()).dispatch()
+
+        if num == 0:
+            raise CLIError(
+                "No data was found in the provided input. Please check your input "
+                "data and try again."
+            )
 
     async with asyncio.TaskGroup() as tg:
         tg.create_task(handle_manifests())

@@ -62,7 +62,15 @@ class Dispatcher(Generic[T, P]):
         for proc in self._processing_registry.values():
             proc.initialize()
 
-    async def dispatch(self) -> None:
+    async def dispatch(self) -> int:
+        """
+        Dispatches payloads from the queue to their corresponding processors.
+
+        Returns:
+            The number of payloads dispatched.
+        """
+        counter = 0
+
         async with asyncio.TaskGroup() as tg:
             async for payload in self._queue_iter():
                 # dispatch the payload to the relevant processor that can handle it
@@ -75,8 +83,12 @@ class Dispatcher(Generic[T, P]):
                 else:
                     await coro
 
+                counter += 1
+
         # shutdown event
         await self.observer.trigger(self.event_builder(None))
+
+        return counter
 
     def register_handler(
         self, filter_: event.FilterType[P], callback: event.CallbackType
