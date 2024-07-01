@@ -197,9 +197,9 @@ resources. Create a new file called ``manifest.yaml`` with the following content
   spec:
     path: hello
     # path to the secrets engine declared before
-    secretsEnginePath: kv
+    secretsEngineRef: kv
     # path to the password policy declared before
-    policyPath: example
+    policyRef: example
     # the key for which the value will be automatically generated using the given
     # password policy
     secretKey: foo
@@ -273,7 +273,7 @@ Output:
    Key                Value
    ---                -----
    created_time       2024-06-17T10:41:19.822630332Z
-   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secretsEnginePath":"kv","path":"hello","encoding":"utf8","version":1,"secretKey":"foo","policyPath":"example"},"kind":"Password"}]
+   custom_metadata    map[hqdncw.github.io/vault-autopilot/snapshot:{"spec":{"secretsEngineRef":"kv","path":"hello","encoding":"utf8","version":1,"secretKey":"foo","policyRef":"example"},"kind":"Password"}]
    deletion_time      n/a
    destroyed          false
    version            1
@@ -359,8 +359,8 @@ Vault Autopilot will update the password policy on your Vault server to reflect 
      kind: Password
      spec:
        path: hello
-       secretsEnginePath: kv
-       policyPath: example
+       secretsEngineRef: kv
+       policyRef: example
        secretKey: foo
        # bump the version from 1 to 2 to trigger a new password generation
        version: 2

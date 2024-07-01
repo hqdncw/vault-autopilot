@@ -223,14 +223,14 @@ class Client:
 
     @exception_handler
     @login_required
-    async def generate_password(self, policy_path: str) -> str:
+    async def generate_password(self, policy_ref: str) -> str:
         """
         Generates a password from the specified existing password policy.
 
         References:
             https://developer.hashicorp.com/vault/api-docs/system/policies-password#generate-password-from-password-policy
         """
-        return await self._pwd_policy_mgr.generate_password(policy_path=policy_path)
+        return await self._pwd_policy_mgr.generate_password(policy_ref=policy_ref)
 
     @exception_handler
     @login_required

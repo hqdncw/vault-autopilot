@@ -102,7 +102,7 @@ class RoleReadResult(AbstractResult):
 
 
 async def raise_issuer_name_taken_exc(
-    response: aiohttp.ClientResponse, name_collision: str, secrets_engine_path: str
+    response: aiohttp.ClientResponse, name_collision: str, secrets_engine_ref: str
 ) -> NoReturn:
     raise IssuerNameTakenError(
         "Issuer name {ctx[path_collision]!r} (secrets_engine: {ctx[mount_path]!r}) "
@@ -110,7 +110,7 @@ async def raise_issuer_name_taken_exc(
         ctx=IssuerNameTakenError.Context(
             **await VaultAPIError.compose_context(response),
             path_collision=name_collision,
-            mount_path=secrets_engine_path,
+            mount_path=secrets_engine_ref,
         ),
     )
 
@@ -139,7 +139,7 @@ class PKIManager(BaseManager):
                 await raise_issuer_name_taken_exc(
                     resp,
                     name_collision=payload["issuer_name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
-                    secrets_engine_path=payload["mount_path"],
+                    secrets_engine_ref=payload["mount_path"],
                 )
 
         raise await VaultAPIError.from_response("Failed to create root issuer", resp)
@@ -234,7 +234,7 @@ class PKIManager(BaseManager):
                 await raise_issuer_name_taken_exc(
                     resp,
                     name_collision=payload["issuer_name"],  # pyright: ignore[reportTypedDictNotRequiredAccess]
-                    secrets_engine_path=payload["mount_path"],
+                    secrets_engine_ref=payload["mount_path"],
                 )
 
         raise await VaultAPIError.from_response("Failed to update Issuer", resp)
@@ -287,6 +287,6 @@ class PKIManager(BaseManager):
             return RoleReadResult.from_response(await resp.json() or {})
 
         if resp.status == HTTPStatus.NOT_FOUND:
-            return
+            return None
 
         raise await VaultAPIError.from_response("Failed to read pki role", resp)

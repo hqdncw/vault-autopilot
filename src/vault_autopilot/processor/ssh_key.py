@@ -4,6 +4,7 @@ from typing import Iterable, Sequence
 
 from typing_extensions import override
 
+from vault_autopilot.processor.secrets_engine import SecretsEngineFallbackNode
 from vault_autopilot.service.abstract import ApplyResult
 
 from .. import dto
@@ -12,10 +13,11 @@ from ..service import SSHKeyService
 from .abstract import (
     AbstractNode,
     ChainBasedProcessor,
-    SecretsEngineFallbackNode,
 )
 
 logger = logging.getLogger(__name__)
+
+NODE_PREFIX = "ssh-keys/"
 
 
 @dataclass(slots=True)
@@ -24,7 +26,7 @@ class SSHKeyNode(AbstractNode):
 
     @override
     def __hash__(self) -> int:
-        return hash(self.absolute_path)
+        return hash(NODE_PREFIX + self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.SSHKeyApplyDTO) -> "SSHKeyNode":
@@ -46,11 +48,7 @@ class SSHKeyApplyProcessor(
     ) -> Iterable[NodeType]:
         assert isinstance(node, SSHKeyNode), node
 
-        return (
-            SecretsEngineFallbackNode.from_absolute_path(
-                node.payload.spec["secrets_engine_path"]
-            ),
-        )
+        return (SecretsEngineFallbackNode(node.payload.spec["secrets_engine_ref"]),)
 
     @override
     def initialize(self) -> None:
@@ -78,7 +76,7 @@ class SSHKeyApplyProcessor(
     @override
     def upstream_node_builder(self, ev: event.EventType) -> NodeType:
         assert isinstance(ev, event.SecretsEngineApplySuccess), ev
-        return SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"])
+        return SecretsEngineFallbackNode(ev.resource.spec["path"])
 
     @override
     def downstream_selector(self, node: NodeType) -> bool:

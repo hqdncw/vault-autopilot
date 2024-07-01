@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from asyncio import Semaphore, TaskGroup
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Generic, Iterable, Self, TypeVar
+from typing import Generic, Iterable, TypeVar
 
 from ironfence import Mutex
 from typing_extensions import TYPE_CHECKING, override
@@ -13,7 +13,7 @@ from vault_autopilot.exc import UnresolvedDependencyError
 from .._pkg import asyva
 from ..util.coro import create_task_limited
 from ..util.dependency_chain import AbstractNode as Node
-from ..util.dependency_chain import DependencyChain, FallbackNode
+from ..util.dependency_chain import DependencyChain
 
 if TYPE_CHECKING:
     from ..dispatcher import event
@@ -30,23 +30,11 @@ class AbstractNode(Node):
 
 
 @dataclass(slots=True)
-class AbstractFallbackNode(FallbackNode):
+class AbstractFallbackNode(Node):
     absolute_path: str
 
-    @classmethod
-    def from_absolute_path(cls, path: str) -> Self:
-        return cls(node_hash=hash(path), absolute_path=path)
-
     @override
-    def __hash__(self) -> int:
-        return self.node_hash
-
-
-@dataclass(slots=True)
-class SecretsEngineFallbackNode(AbstractFallbackNode):
-    @override
-    def __hash__(self) -> int:
-        return self.node_hash
+    def __hash__(self) -> int: ...
 
 
 @dataclass(slots=True)

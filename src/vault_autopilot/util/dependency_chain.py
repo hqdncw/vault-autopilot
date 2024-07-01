@@ -41,42 +41,6 @@ class AbstractNode:
 
 
 @dataclass(slots=True)
-class FallbackNode(AbstractNode):
-    """
-    Efficiently represents a :class:`Node` object before its payload is available.
-
-    When working with large datasets, it's often necessary to establish relationships
-    between nodes before their payloads are fully loaded. This class allows you to
-    create a fallback node that can be used for ordering dependencies without having
-    to wait for the full node information.
-
-    Once a `FallbackNode` has been created, it can be used in place of a regular
-    `Node` object.
-
-    Example::
-
-        >>> @dataclass
-        ... class Node(AbstractNode):
-        ...    uid: int
-        ...    payload: Any
-        ...
-        ...   @override
-        ...   def __hash__(self) -> int:
-        ...       return hash(self.uid)
-        ...
-        ... uid = 123
-        ... assert hash(FallbackNode(uid)) == hash(Node(uid=uid, payload="foo"))
-        True
-    """
-
-    node_hash: int
-
-    @override
-    def __hash__(self) -> int:
-        return self.node_hash
-
-
-@dataclass(slots=True)
 class DependencyChain(Generic[T]):
     """
     A class for managing dependencies between objects.

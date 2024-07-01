@@ -16,13 +16,16 @@ from .issuer import IssuerFallbackNode
 logger = logging.getLogger(__name__)
 
 
+NODE_PREFIX = "pki-roles/"
+
+
 @dataclass(slots=True)
 class PKIRoleNode(AbstractNode):
     payload: dto.PKIRoleApplyDTO
 
     @override
     def __hash__(self) -> int:
-        return hash(self.absolute_path)
+        return hash(NODE_PREFIX + self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.PKIRoleApplyDTO) -> "PKIRoleNode":
@@ -44,11 +47,7 @@ class PKIRoleApplyProcessor(
     ) -> Iterable[NodeType]:
         assert isinstance(node, PKIRoleNode), node
 
-        return (
-            IssuerFallbackNode.from_absolute_path(
-                node.payload.issuer_ref_absolute_path()
-            ),
-        )
+        return (IssuerFallbackNode(node.payload.spec["role"]["issuer_ref"]),)
 
     @override
     def initialize(self) -> None:
@@ -76,7 +75,7 @@ class PKIRoleApplyProcessor(
     @override
     def upstream_node_builder(self, ev: event.EventType) -> NodeType:
         assert isinstance(ev, event.IssuerApplySuccess), ev
-        return IssuerFallbackNode.from_absolute_path(ev.resource.absolute_path())
+        return IssuerFallbackNode(ev.resource.absolute_path())
 
     @override
     def downstream_selector(self, node: NodeType) -> bool:

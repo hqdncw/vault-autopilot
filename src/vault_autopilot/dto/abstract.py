@@ -20,7 +20,7 @@ class AbstractDTO(BaseModel):
 
 class SecretApplyDTO(AbstractDTO):
     class Spec(TypedDict):
-        secrets_engine_path: str
+        secrets_engine_ref: str
         path: str
         encoding: Annotated[Encoding, Field(default="utf8")]
 

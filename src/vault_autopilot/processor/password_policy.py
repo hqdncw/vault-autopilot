@@ -8,9 +8,19 @@ from vault_autopilot.service.abstract import ApplyResult
 from .. import dto
 from ..dispatcher import event
 from ..service import PasswordPolicyService
-from .abstract import AbstractProcessor
+from .abstract import AbstractFallbackNode, AbstractProcessor
 
 logger = logging.getLogger(__name__)
+
+
+NODE_PREFIX = "password-policies/"
+
+
+@dataclass(slots=True)
+class PasswordPolicyFallbackNode(AbstractFallbackNode):
+    @override
+    def __hash__(self) -> int:
+        return hash(NODE_PREFIX + self.absolute_path)
 
 
 @dataclass(slots=True)

@@ -20,8 +20,7 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
         """
         Performs `Check-and-Set` operation on a secret at path
         ``payload["spec"]["path"]``. The value is a generated password using the policy
-        ``payload["spec"]["policyPath"]`` and the key is
-        ``payload["spec"]["secretKey"]``
+        ``payload["spec"]["policyRef"]`` and the key is ``payload["spec"]["secretKey"]``
 
         Raises:
             PasswordPolicyNotFoundError: If the policy is not found.
@@ -31,7 +30,7 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
         spec = payload.spec
 
         # may raise a PasswordPolicyNotFoundError
-        value = await self.client.generate_password(policy_path=spec["policy_path"])
+        value = await self.client.generate_password(policy_ref=spec["policy_ref"])
 
         # may raise a CASParameterMismatchError
         _ = await self.client.update_or_create_kvv2_secret(
@@ -42,10 +41,10 @@ class PasswordService(abstract.VersionedSecretApplyMixin[dto.PasswordApplyDTO]):
                 )
             },
             cas=spec["version"] - 1,
-            mount_path=spec["secrets_engine_path"],
+            mount_path=spec["secrets_engine_ref"],
         )
         _ = await self.client.update_or_create_metadata(
-            mount_path=spec["secrets_engine_path"],
+            mount_path=spec["secrets_engine_ref"],
             path=spec["path"],
             custom_metadata={
                 self.SNAPSHOT_LABEL: model_dump_json(camelize(payload.__dict__))

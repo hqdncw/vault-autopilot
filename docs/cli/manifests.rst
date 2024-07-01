@@ -75,7 +75,7 @@ Creating a root Issuer
    kind: Issuer
    spec:
      name: root-2024
-     secretsEnginePath: pki
+     secretsEngineRef: pki
      certificate:
        type: internal
        commonName: "example.com Root Authority"
@@ -90,7 +90,7 @@ Creating an intermediate Issuer
    kind: Issuer
    spec:
      name: intmd-2024
-     secretsEnginePath: pki_int
+     secretsEngineRef: pki_int
      certificate:
        type: internal
        commonName: "example.com Intermediate Authority"
@@ -128,7 +128,7 @@ Creating a PKI Role
    kind: PKIRole
    spec:
      name: example
-     secretsEnginePath: pki
+     secretsEngineRef: pki
      role:
        issuerRef: root-2024
        allowedDomains: "example.com"
@@ -167,8 +167,8 @@ Here's an example of how to create an SSH Key:
 
    kind: SSHKey
    spec:
-     secretsEnginePath: kv
      path: id_rsa
+     secretsEngineRef: kv
      keyOptions:
        type: rsa
        bits: 4096
@@ -256,8 +256,8 @@ Creating a Password
    kind: Password
    spec:
      path: my-secret
-     secretsEnginePath: kv
-     policyPath: example
+     secretsEngineRef: kv
+     policyRef: example
      secretKey: foo
      version: 1
 
@@ -273,8 +273,8 @@ Creating a Password
      kind: Password
      spec:
        path: my-secret
-       secretsEnginePath: kv
-       policyPath: example
+       secretsEngineRef: kv
+       policyRef: example
        secretKey: foo
        # bump the version from 1 to 2 to trigger a new password generation
        version: 2

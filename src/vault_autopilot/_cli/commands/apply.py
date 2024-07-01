@@ -309,7 +309,7 @@ async def async_apply(
 
             path = ev.resource.absolute_path()
             stage.renderer.create_or_update_record(
-                record_uid=hash(path),
+                record_uid=hash(ev.resource.__class__.__name__ + path),
                 content=template[0].format(
                     resource_kind=ev.resource.kind,
                     absolute_path=path,

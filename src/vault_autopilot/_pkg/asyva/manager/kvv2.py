@@ -165,7 +165,7 @@ class KvV2Manager(BaseManager):
 
     async def read_configuration(
         self, **payload: Unpack[dto.SecretsEngineReadDTO]
-    ) -> ReadConfigurationResult:
+    ) -> ReadConfigurationResult | None:
         """
         References:
             <https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2#read-kv-engine-configuration>
@@ -175,6 +175,9 @@ class KvV2Manager(BaseManager):
 
         if resp.status == HTTPStatus.OK:
             return ReadConfigurationResult.from_response(await resp.json())
+
+        if resp.status == HTTPStatus.NOT_FOUND:
+            return None
 
         raise await VaultAPIError.from_response(
             "Failed to read kv engine configuration", resp

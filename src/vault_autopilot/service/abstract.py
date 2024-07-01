@@ -189,7 +189,7 @@ class VersionedSecretApplyMixin(Generic[T]):
             if diff := await self.diff(
                 payload,
                 await self.client.read_kv_metadata(
-                    mount_path=payload.spec["secrets_engine_path"],
+                    mount_path=payload.spec["secrets_engine_ref"],
                     path=payload.spec["path"],
                 ),
             ):

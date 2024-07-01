@@ -7,16 +7,18 @@ from typing_extensions import override
 
 from .. import dto
 from ..dispatcher import event
+from ..processor.secrets_engine import SecretsEngineFallbackNode
 from ..service import IssuerService
 from ..service.abstract import ApplyResult
 from .abstract import (
     AbstractFallbackNode,
     AbstractNode,
     ChainBasedProcessor,
-    SecretsEngineFallbackNode,
 )
 
 logger = logging.getLogger(__name__)
+
+NODE_PREFIX = "issuers/"
 
 
 @dataclass(slots=True)
@@ -30,7 +32,7 @@ class IssuerNode(AbstractNode):
 
     @override
     def __hash__(self) -> int:
-        return hash(self.absolute_path)
+        return hash(NODE_PREFIX + self.absolute_path)
 
     @classmethod
     def from_payload(cls, payload: dto.IssuerApplyDTO) -> "IssuerNode":
@@ -50,7 +52,7 @@ class IssuerNode(AbstractNode):
 class IssuerFallbackNode(AbstractFallbackNode):
     @override
     def __hash__(self) -> int:
-        return self.node_hash
+        return hash(NODE_PREFIX + self.absolute_path)
 
 
 NodeType = IssuerNode | IssuerFallbackNode | SecretsEngineFallbackNode
@@ -69,17 +71,9 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
         ), "You can't build fallbacks for the node that is fallback itself"
 
         if node.payload.spec.get("chaining"):
-            return (
-                IssuerFallbackNode.from_absolute_path(
-                    node.payload.upstream_issuer_absolute_path()
-                ),
-            )
+            return (IssuerFallbackNode(node.payload.upstream_issuer_absolute_path()),)
 
-        return (
-            SecretsEngineFallbackNode.from_absolute_path(
-                node.payload.spec["secrets_engine_path"]
-            ),
-        )
+        return (SecretsEngineFallbackNode(node.payload.spec["secrets_engine_ref"]),)
 
     @override
     async def _flush(self, node: NodeType) -> None:
@@ -149,7 +143,7 @@ class IssuerApplyProcessor(ChainBasedProcessor[NodeType, event.EventType]):
     @override
     def upstream_node_builder(self, ev: event.EventType) -> NodeType:
         assert isinstance(ev, event.SecretsEngineApplySuccess), ev
-        return SecretsEngineFallbackNode.from_absolute_path(ev.resource.spec["path"])
+        return SecretsEngineFallbackNode(ev.resource.spec["path"])
 
     @override
     def downstream_selector(self, node: NodeType) -> bool:
