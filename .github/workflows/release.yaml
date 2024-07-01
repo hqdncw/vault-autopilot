@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       tag: ${{ steps.release.outputs.tag }}
+      released: ${{ steps.release.outputs.released }}
     concurrency: push
     permissions:
       id-token: write
