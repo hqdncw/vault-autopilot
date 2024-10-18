@@ -18,6 +18,8 @@ _config = ConfigDict(alias_generator=to_camel, extra="forbid")
 @dataclass(slots=True, config=_config, kw_only=True)
 class KubernetesAuthMethod(asyva.KubernetesAuthenticator):
     method: Literal["kubernetes"]
+    # TODO: Workaround for Pydantic bug: enables proper generation of camelCase aliases.
+    mount_path: Annotated[str, Field(alias="mount_path")]
 
 
 @dataclass(slots=True, config=_config, kw_only=True)
